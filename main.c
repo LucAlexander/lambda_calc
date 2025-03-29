@@ -42,8 +42,8 @@ deep_copy(interpreter* const inter, string_map* map, expr* const target){
 	switch (target->tag){
 	case BIND_EXPR:
 		new->data.bind.name = next_string(inter);
-		new->data.bind.expression = deep_copy(inter, map, target->data.bind.expression);
 		string_map_insert(map, target->data.bind.name.str, &new->data.bind.name);
+		new->data.bind.expression = deep_copy(inter, map, target->data.bind.expression);
 		return new;
 	case APPL_EXPR:
 		new->data.appl.left = deep_copy(inter, map, target->data.appl.left);
@@ -61,35 +61,43 @@ deep_copy(interpreter* const inter, string_map* map, expr* const target){
 }
 
 expr*
+deep_copy_replace(interpreter* const inter, string_map* map, expr* const target, char* replace, expr* const replace_term){
+	expr* new = pool_request(inter->mem, sizeof(expr));
+	new->tag = target->tag;
+	switch (target->tag){
+	case BIND_EXPR:
+		new->data.bind.name = next_string(inter);
+		string_map_insert(map, target->data.bind.name.str, &new->data.bind.name);
+		new->data.bind.expression = deep_copy_replace(inter, map, target->data.bind.expression, replace, replace_term);
+		return new;
+	case APPL_EXPR:
+		new->data.appl.left = deep_copy_replace(inter, map, target->data.appl.left, replace, replace_term);
+		new->data.appl.right = deep_copy_replace(inter, map, target->data.appl.right, replace, replace_term);
+		return new;
+	case NAME_EXPR:
+		if (strncmp(replace, target->data.name.str, target->data.name.len) == 0){
+			expr* replaced = deep_copy(inter, NULL, replace_term);
+			*new = *replaced;
+			return new;
+		}
+		string* access = string_map_access(map, target->data.name.str);
+		if (access == NULL){
+			return NULL;
+		}
+		new->data.name = *access;
+		return new;
+	}
+	return new;
+}
+
+expr*
 apply_term(interpreter* const inter, expr* const left, expr* const right){
 	if (left->tag != BIND_EXPR){
 		return NULL;
 	}
 	char* target = left->data.bind.name.str;
-	uint64_t target_len = left->data.bind.name.len;
-	expr* stack[APPLICATION_STACK_LIMIT];
-	uint64_t sp = 0;
-	expr* new = deep_copy(inter, NULL, left);
-	stack[sp++] = new;
-	while (sp > 0){
-		expr* current = stack[sp-1];
-		switch (current->tag){
-		case BIND_EXPR:
-			stack[sp-1] = current->data.bind.expression;
-			continue;
-		case APPL_EXPR:
-			stack[sp-1] = current->data.appl.left;
-			stack[sp++] = current->data.appl.right;
-			continue;
-		case NAME_EXPR:
-			if (strncmp(target, current->data.name.str, target_len) == 0){
-				expr* copy = deep_copy(inter, NULL, current);
-				*current = *copy;
-			}
-			sp -= 1;
-			continue;
-		}
-	}
+	string_map new_map = string_map_init(inter->mem);
+	expr* new = deep_copy_replace(inter, &new_map, left->data.bind.expression, target, right);
 	return new;
 }
 
@@ -122,5 +130,35 @@ int main(int argc, char** argv){
 	inter.next.str[0] = 'a';
 	inter.next.str[1] = '\0';
 	inter.next.len = 1;
+	{
+		expr* t = pool_request(&mem, sizeof(expr));
+		t->tag = BIND_EXPR;
+		t->data.bind.name = next_string(&inter);
+		expr* inner = pool_request(&mem, sizeof(expr));
+		inner->tag = BIND_EXPR;
+		inner->data.bind.name = next_string(&inter);
+		t->data.bind.expression = inner;
+		expr* result = pool_request(&mem, sizeof(expr));
+		inner->data.bind.expression = result;
+		result->tag = NAME_EXPR;
+		result->data.name = t->data.bind.name;
+		show_term(t);
+		printf("\n");
+		expr* iden = pool_request(&mem, sizeof(expr));
+		iden->tag = BIND_EXPR;
+		iden->data.bind.name = next_string(&inter);
+		expr* var = pool_request(&mem, sizeof(expr));
+		iden->data.bind.expression = var;
+		var->tag = NAME_EXPR;
+		var->data.name = iden->data.bind.name;
+		show_term(iden);
+		printf("\n");
+		expr* new = apply_term(&inter, t, iden);
+		show_term(new);
+		printf("\n");
+		expr* new2 = apply_term(&inter, iden, t);
+		show_term(new2);
+		printf("\n");
+	}
 	return 0;
 }
