@@ -43,7 +43,9 @@ typedef struct interpreter {
 
 string next_string(interpreter* const inter);
 expr* deep_copy(interpreter* const inter, string_map* map, expr* const target);
+expr* deep_copy_replace(interpreter* const inter, string_map* map, expr* const target, char* replace, expr* const replace_term);
 expr* apply_term(interpreter* const inter, expr* const left, expr* const right);
+uint8_t reduce_step(interpreter* const inter, expr* const expression);
 void show_term(expr* const ex);
 
 #endif

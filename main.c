@@ -101,6 +101,23 @@ apply_term(interpreter* const inter, expr* const left, expr* const right){
 	return new;
 }
 
+uint8_t
+reduce_step(interpreter* const inter, expr* const expression){
+	switch (expression->tag){
+	case BIND_EXPR:
+		return reduce_step(inter, expression->data.bind.expression);
+	case APPL_EXPR:
+		if (reduce_step(inter, expression->data.appl.left) == 0){
+			expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
+			*expression = *new;
+		}
+		return 1;
+	case NAME_EXPR:
+		return 0;
+	}
+	return 0;
+}
+
 void
 show_term(expr* const ex){
 	switch (ex->tag){
@@ -158,6 +175,22 @@ int main(int argc, char** argv){
 		printf("\n");
 		expr* new2 = apply_term(&inter, iden, t);
 		show_term(new2);
+		printf("\n");
+		expr* application = pool_request(&mem, sizeof(expr));
+		application->tag = APPL_EXPR;
+		application->data.appl.left = new;
+		application->data.appl.right = new2;
+		expr* outer = pool_request(&mem, sizeof(expr));
+		outer->tag = APPL_EXPR;
+		outer->data.appl.left = application;
+		outer->data.appl.right = t;
+		show_term(outer);
+		printf("\n");
+		reduce_step(&inter, outer);
+		show_term(outer);
+		printf("\n");
+		reduce_step(&inter, outer);
+		show_term(outer);
 		printf("\n");
 	}
 	return 0;
