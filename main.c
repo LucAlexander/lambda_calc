@@ -108,6 +108,9 @@ reduce_step(interpreter* const inter, expr* const expression){
 		return reduce_step(inter, expression->data.bind.expression);
 	case APPL_EXPR:
 		if (reduce_step(inter, expression->data.appl.left) == 0){
+			if (expression->data.appl.left->tag != BIND_EXPR){
+				return 0;
+			}
 			expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
 			*expression = *new;
 		}
@@ -186,12 +189,11 @@ int main(int argc, char** argv){
 		outer->data.appl.right = t;
 		show_term(outer);
 		printf("\n");
-		reduce_step(&inter, outer);
-		show_term(outer);
-		printf("\n");
-		reduce_step(&inter, outer);
-		show_term(outer);
-		printf("\n");
+		while (reduce_step(&inter, outer) != 0){
+			printf(" -> ");
+			show_term(outer);
+			printf("\n");
+		}
 	}
 	return 0;
 }

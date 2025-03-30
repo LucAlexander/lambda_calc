@@ -9,8 +9,8 @@ Expected output:
     \d.\e.e
     \f.\g.f
     ((\d.\e.e \f.\g.f) \a.\b.a)
-    (\h.h \a.\b.a)
-    \i.\j.i
+     -> (\h.h \a.\b.a)
+     -> \i.\j.i
 
 ```
 
