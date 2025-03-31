@@ -4,7 +4,7 @@
 #include <inttypes.h>
 #include "hashmap.h"
 
-#define POOL_SIZE 0x1000000
+#define POOL_SIZE 0x10000000
 #define NAME_MAX 16
 #define TOKEN_MAX NAME_MAX
 #define APPLICATION_STACK_LIMIT 32
@@ -54,5 +54,8 @@ void rebase_worker(interpreter* const inter, string_map* const map, expr* const 
 void rebase_term(interpreter* const inter, expr* const expression);
 expr* rebase_worker_copy(interpreter* const inter, string_map* const map, expr* const expression);
 expr* rebase_term_copy(interpreter* const inter, expr* const expression);
+void generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth);
+uint8_t term_depth(expr* const expression);
+uint8_t term_bind_depth(expr* const expression);
 
 #endif

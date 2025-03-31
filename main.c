@@ -142,7 +142,7 @@ show_term(expr* const ex){
 		printf(")");
 		return;
 	case NAME_EXPR:
-		printf("%s", ex->data.bind.name.str);
+		printf("%s", ex->data.name.str);
 		return;
 	}
 }
@@ -187,7 +187,6 @@ generate_term(interpreter* const inter, uint64_t depth){
 	if (depth == 0){
 		return NULL;
 	}
-	srand(time(NULL));
 	string* assoc = pool_request(inter->mem, sizeof(string)*depth);
 	return generate_term_internal(inter, assoc, 0, 0, depth);
 }
@@ -254,14 +253,19 @@ rebase_copy_worker(interpreter* const inter, string_map* const map, expr* const 
 	return NULL;
 }
 
+void
+reset_universe(interpreter* const inter){
+	inter->next.str[0] = 'a';
+	inter->next.str[1] = '\0';
+	inter->next.len = 1;
+}
+
 expr*
 rebase_term_copy(interpreter* const inter, expr* const expression){
 	if (inter->next.str == NULL){
 		inter->next.str = pool_request(inter->mem, NAME_MAX);
 	}
-	inter->next.str[0] = 'a';
-	inter->next.str[1] = '\0';
-	inter->next.len = 1;
+	reset_universe(inter);
 	string_map map = string_map_init(inter->mem);
 	return rebase_copy_worker(inter, &map, expression);
 }
@@ -272,72 +276,82 @@ interpreter_init(pool* const mem){
 		.mem=mem,
 		.next.str = pool_request(mem, NAME_MAX)
 	};
-	inter.next.str[0] = 'a';
-	inter.next.str[1]= '\0';
-	inter.next.len = 1;
+	reset_universe(&inter);
 	return inter;
 }
 
-int main(int argc, char** argv){
-	pool mem = pool_alloc(POOL_SIZE, POOL_STATIC);
-	interpreter inter = interpreter_init(&mem);
+void
+generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth){
+	reset_universe(inter);
+	expr* f;
+	while (1){
+		f = generate_term(inter, f_comp);
+		if (term_bind_depth(f) < arg_count){
+			continue;
+		}
+		if (term_depth(f) < base_comp){
+			continue;
+		}
+		break;
+	}
+	rebase_term(inter, f);
+	show_term(f);
+	printf("\n");
+	expr* z = f;
+	while (arg_count > 0){
+		expr* arg = generate_term(inter, arg_comp);
+		while (term_depth(arg) < necessary_depth){
+			arg = generate_term(inter, arg_comp);
+		}
+		show_term(arg);
+		printf("\n");
+		z = apply_term(inter, z, arg);
+		arg_count -= 1;
+	}
+	while (reduce_step(inter, z) != 0){ }
+	rebase_term(inter, z);
+	show_term(z);
+	printf("\n");
+}
+
+uint8_t
+term_depth(expr* const expression){
+	switch (expression->tag){
+	case BIND_EXPR:
+		return 1 + term_depth(expression->data.bind.expression);
+	case APPL_EXPR:
+		uint8_t a = term_depth(expression->data.appl.left);
+		uint8_t b = term_depth(expression->data.appl.left);
+		if (a>b){
+			return a+1;
+		}
+		return b+1;
+	case NAME_EXPR:
+		return 0;
+	}
+	return 0;
+}
+
+uint8_t
+term_bind_depth(expr* const expression){
+	switch(expression->tag){
+	case BIND_EXPR:
+		return 1+term_bind_depth(expression->data.bind.expression);
+	default:
+		return 0;
+	}
+	return 0;
+}
+
+int
+main(int argc, char** argv){
+	srand(time(NULL));
 	{
-		expr* t = pool_request(&mem, sizeof(expr));
-		t->tag = BIND_EXPR;
-		t->data.bind.name = next_string(&inter);
-		expr* inner = pool_request(&mem, sizeof(expr));
-		inner->tag = BIND_EXPR;
-		inner->data.bind.name = next_string(&inter);
-		t->data.bind.expression = inner;
-		expr* result = pool_request(&mem, sizeof(expr));
-		inner->data.bind.expression = result;
-		result->tag = NAME_EXPR;
-		result->data.name = t->data.bind.name;
-		show_term(t);
-		printf("\n");
-		expr* iden = pool_request(&mem, sizeof(expr));
-		iden->tag = BIND_EXPR;
-		iden->data.bind.name = next_string(&inter);
-		expr* var = pool_request(&mem, sizeof(expr));
-		iden->data.bind.expression = var;
-		var->tag = NAME_EXPR;
-		var->data.name = iden->data.bind.name;
-		show_term(iden);
-		printf("\n");
-		expr* new = apply_term(&inter, t, iden);
-		show_term(new);
-		printf("\n");
-		expr* new2 = apply_term(&inter, iden, t);
-		show_term(new2);
-		printf("\n");
-		expr* application = pool_request(&mem, sizeof(expr));
-		application->tag = APPL_EXPR;
-		application->data.appl.left = new;
-		application->data.appl.right = new2;
-		expr* outer = pool_request(&mem, sizeof(expr));
-		outer->tag = APPL_EXPR;
-		outer->data.appl.left = application;
-		outer->data.appl.right = t;
-		show_term(outer);
-		printf("\n");
-		while (reduce_step(&inter, outer) != 0){
-			printf(" -> ");
-			show_term(outer);
-			printf("\n");
-		}
-		printf("generating term\n");
-		expr* generated = generate_term(&inter, 9);
-		show_term(generated);
-		printf("\n");
-		while (reduce_step(&inter, generated) != 0){
-			printf(" -> ");
-			show_term(generated);
-			printf("\n");
-		}
-		printf("rebasing term\n");
-		rebase_term(&inter, generated);
-		show_term(generated);
-		printf("\n");
+		printf("Puzzles\n");
+		pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+		interpreter inter = interpreter_init(&mem);
+		printf("1\n");
+		generate_puzzle(&inter, 6, 4, 4, 4, 3);
 	}
 	return 0;
 }
