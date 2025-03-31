@@ -245,7 +245,7 @@ int main(int argc, char** argv){
 			show_term(outer);
 			printf("\n");
 		}
-		expr* generated = generate_term(&inter, 6);
+		expr* generated = generate_term(&inter, 9);
 		show_term(generated);
 		printf("\n");
 		while (reduce_step(&inter, generated) != 0){
