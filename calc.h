@@ -47,5 +47,7 @@ expr* deep_copy_replace(interpreter* const inter, string_map* map, expr* const t
 expr* apply_term(interpreter* const inter, expr* const left, expr* const right);
 uint8_t reduce_step(interpreter* const inter, expr* const expression);
 void show_term(expr* const ex);
+expr* generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth);
+expr* generate_term(interpreter* const inter, uint64_t depth);
 
 #endif

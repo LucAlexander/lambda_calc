@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <stdlib.h>
 #include "calc.h"
 
 MAP_IMPL(string)
@@ -52,7 +54,8 @@ deep_copy(interpreter* const inter, string_map* map, expr* const target){
 	case NAME_EXPR:
 		string* access = string_map_access(map, target->data.name.str);
 		if (access == NULL){
-			return NULL;
+			new->data.name = target->data.name;
+			return new;
 		}
 		new->data.name = *access;
 		return new;
@@ -82,7 +85,8 @@ deep_copy_replace(interpreter* const inter, string_map* map, expr* const target,
 		}
 		string* access = string_map_access(map, target->data.name.str);
 		if (access == NULL){
-			return NULL;
+			new->data.name = target->data.name;
+			return new;
 		}
 		new->data.name = *access;
 		return new;
@@ -108,11 +112,13 @@ reduce_step(interpreter* const inter, expr* const expression){
 		return reduce_step(inter, expression->data.bind.expression);
 	case APPL_EXPR:
 		if (reduce_step(inter, expression->data.appl.left) == 0){
-			if (expression->data.appl.left->tag != BIND_EXPR){
-				return 0;
+			if (reduce_step(inter, expression->data.appl.right) == 0){
+				if (expression->data.appl.left->tag != BIND_EXPR){
+					return 0;
+				}
+				expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
+				*expression = *new;
 			}
-			expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
-			*expression = *new;
 		}
 		return 1;
 	case NAME_EXPR:
@@ -139,6 +145,51 @@ show_term(expr* const ex){
 		printf("%s", ex->data.bind.name.str);
 		return;
 	}
+}
+
+expr*
+generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth){
+	if (current_depth == max_depth){
+		uint64_t index = rand() % current_index;
+		expr* name = pool_request(inter->mem, sizeof(expr));
+		name->tag = NAME_EXPR;
+		name->data.name = assoc[index];
+		return name;
+	}
+	expr* new = pool_request(inter->mem, sizeof(expr));
+	uint8_t max = 3;
+	if (current_index == 0){
+		max = 1;
+	}
+	switch (rand() % max){
+	case 0:
+		new->tag = BIND_EXPR;
+		new->data.bind.name = next_string(inter);
+		assoc[current_index] = new->data.bind.name;
+		new->data.bind.expression = generate_term_internal(inter, assoc, current_index+1, current_depth+1, max_depth);
+		return new;
+	case 1:
+		new->tag = APPL_EXPR;
+		new->data.appl.left = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
+		new->data.appl.right = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
+		return new;
+	case 2:
+		uint64_t index = rand() % current_index;
+		new->tag = NAME_EXPR;
+		new->data.name = assoc[index];
+		return new;
+	}
+	return new;
+}
+
+expr*
+generate_term(interpreter* const inter, uint64_t depth){
+	if (depth == 0){
+		return NULL;
+	}
+	srand(time(NULL));
+	string* assoc = pool_request(inter->mem, sizeof(string)*depth);
+	return generate_term_internal(inter, assoc, 0, 0, depth);
 }
 
 int main(int argc, char** argv){
@@ -192,6 +243,14 @@ int main(int argc, char** argv){
 		while (reduce_step(&inter, outer) != 0){
 			printf(" -> ");
 			show_term(outer);
+			printf("\n");
+		}
+		expr* generated = generate_term(&inter, 6);
+		show_term(generated);
+		printf("\n");
+		while (reduce_step(&inter, generated) != 0){
+			printf(" -> ");
+			show_term(generated);
 			printf("\n");
 		}
 	}
