@@ -50,4 +50,9 @@ void show_term(expr* const ex);
 expr* generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth);
 expr* generate_term(interpreter* const inter, uint64_t depth);
 
+void rebase_worker(interpreter* const inter, string_map* const map, expr* const expression);
+void rebase_term(interpreter* const inter, expr* const expression);
+expr* rebase_worker_copy(interpreter* const inter, string_map* const map, expr* const expression);
+expr* rebase_term_copy(interpreter* const inter, expr* const expression);
+
 #endif

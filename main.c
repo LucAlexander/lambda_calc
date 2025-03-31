@@ -192,15 +192,95 @@ generate_term(interpreter* const inter, uint64_t depth){
 	return generate_term_internal(inter, assoc, 0, 0, depth);
 }
 
-int main(int argc, char** argv){
-	pool mem = pool_alloc(POOL_SIZE, POOL_STATIC);
+void
+rebase_worker(interpreter* const inter, string_map* const map, expr* const expression){
+	switch (expression->tag){
+	case BIND_EXPR:
+		string new = next_string(inter);
+		string_map_insert(map, expression->data.bind.name.str, &new);
+		expression->data.bind.name = new;
+		rebase_worker(inter, map, expression->data.bind.expression);
+		return;
+	case APPL_EXPR:
+		rebase_worker(inter, map, expression->data.appl.left);
+		rebase_worker(inter, map, expression->data.appl.right);
+		return;
+	case NAME_EXPR:
+		string* access = string_map_access(map, expression->data.name.str);
+		if (access != NULL){
+			expression->data.name = *access;
+		}
+		return;
+	}
+}
+
+void
+rebase_term(interpreter* const inter, expr* const expression){
+	if (inter->next.str == NULL){
+		inter->next.str = pool_request(inter->mem, NAME_MAX);
+	}
+	inter->next.str[0] = 'a';
+	inter->next.str[1] = '\0';
+	inter->next.len = 1;
+	string_map map = string_map_init(inter->mem);
+	rebase_worker(inter, &map, expression);
+}
+
+expr*
+rebase_copy_worker(interpreter* const inter, string_map* const map, expr* const expression){
+	expr* new = pool_request(inter->mem, sizeof(expr));
+	new->tag = expression->tag;
+	switch (expression->tag){
+	case BIND_EXPR:
+		string new_str = next_string(inter);
+		new->data.bind.name = new_str;
+		string_map_insert(map, expression->data.bind.name.str, &new_str);
+		new->data.bind.expression = rebase_copy_worker(inter, map, expression->data.bind.expression);
+		return new;
+	case APPL_EXPR:
+		new->data.appl.left = rebase_copy_worker(inter, map, expression->data.appl.left);
+		new->data.appl.right = rebase_copy_worker(inter, map, expression->data.appl.right);
+		return new;
+	case NAME_EXPR:
+		string* access = string_map_access(map, expression->data.name.str);
+		if (access != NULL){
+			new->data.name = *access;
+			return new;
+		}
+		new->data.name.str = pool_request(inter->mem, expression->data.name.len+1);
+		strncpy(new->data.name.str, expression->data.name.str, expression->data.name.len);
+		return new;
+	}
+	return NULL;
+}
+
+expr*
+rebase_term_copy(interpreter* const inter, expr* const expression){
+	if (inter->next.str == NULL){
+		inter->next.str = pool_request(inter->mem, NAME_MAX);
+	}
+	inter->next.str[0] = 'a';
+	inter->next.str[1] = '\0';
+	inter->next.len = 1;
+	string_map map = string_map_init(inter->mem);
+	return rebase_copy_worker(inter, &map, expression);
+}
+
+interpreter
+interpreter_init(pool* const mem){
 	interpreter inter = {
-		.mem = &mem,
-		.next.str = pool_request(&mem, NAME_MAX)
+		.mem=mem,
+		.next.str = pool_request(mem, NAME_MAX)
 	};
 	inter.next.str[0] = 'a';
-	inter.next.str[1] = '\0';
+	inter.next.str[1]= '\0';
 	inter.next.len = 1;
+	return inter;
+}
+
+int main(int argc, char** argv){
+	pool mem = pool_alloc(POOL_SIZE, POOL_STATIC);
+	interpreter inter = interpreter_init(&mem);
 	{
 		expr* t = pool_request(&mem, sizeof(expr));
 		t->tag = BIND_EXPR;
@@ -245,6 +325,7 @@ int main(int argc, char** argv){
 			show_term(outer);
 			printf("\n");
 		}
+		printf("generating term\n");
 		expr* generated = generate_term(&inter, 9);
 		show_term(generated);
 		printf("\n");
@@ -253,6 +334,10 @@ int main(int argc, char** argv){
 			show_term(generated);
 			printf("\n");
 		}
+		printf("rebasing term\n");
+		rebase_term(&inter, generated);
+		show_term(generated);
+		printf("\n");
 	}
 	return 0;
 }
