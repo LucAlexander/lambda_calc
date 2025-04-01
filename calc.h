@@ -49,11 +49,13 @@ uint8_t reduce_step(interpreter* const inter, expr* const expression);
 void show_term(expr* const ex);
 expr* generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth);
 expr* generate_term(interpreter* const inter, uint64_t depth);
-
+expr* generate_entropic_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t base_depth, uint64_t max_depth);
+expr* generate_entropic_term(interpreter* const inter, uint64_t base_depth, uint64_t max_depth);
 void rebase_worker(interpreter* const inter, string_map* const map, expr* const expression);
 void rebase_term(interpreter* const inter, expr* const expression);
 expr* rebase_worker_copy(interpreter* const inter, string_map* const map, expr* const expression);
 expr* rebase_term_copy(interpreter* const inter, expr* const expression);
+void generate_entropic_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth);
 void generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth);
 uint8_t term_depth(expr* const expression);
 uint8_t term_bind_depth(expr* const expression);

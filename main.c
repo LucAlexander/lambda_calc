@@ -191,6 +191,57 @@ generate_term(interpreter* const inter, uint64_t depth){
 	return generate_term_internal(inter, assoc, 0, 0, depth);
 }
 
+expr*
+generate_entropic_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t base_depth, uint64_t max_depth){
+	if (current_depth == max_depth){
+		uint64_t index = rand() % current_index;
+		expr* name = pool_request(inter->mem, sizeof(expr));
+		name->tag = NAME_EXPR;
+		name->data.name = assoc[index];
+		return name;
+	}
+	expr* new = pool_request(inter->mem, sizeof(expr));
+	if (current_depth < base_depth){
+		new->tag = BIND_EXPR;
+		new->data.bind.name = next_string(inter);
+		assoc[current_index] = new->data.bind.name;
+		new->data.bind.expression = generate_entropic_term_internal(inter, assoc, current_index+1, current_depth+1, base_depth, max_depth);
+		return new;
+	}
+	uint64_t choice = rand() % 3;
+	if (choice != 1){
+		choice = rand() % 3;
+	}
+	switch (choice){
+	case 0:
+		new->tag = BIND_EXPR;
+		new->data.bind.name = next_string(inter);
+		assoc[current_index] = new->data.bind.name;
+		new->data.bind.expression = generate_entropic_term_internal(inter, assoc, current_index+1, current_depth+1, base_depth, max_depth);
+		return new;
+	case 1:
+		new->tag = APPL_EXPR;
+		new->data.appl.left = generate_entropic_term_internal(inter, assoc, current_index, current_depth+1, base_depth, max_depth);
+		new->data.appl.right = generate_entropic_term_internal(inter, assoc, current_index, current_depth+1, base_depth, max_depth);
+		return new;
+	case 2:
+		uint64_t index = rand() % current_index;
+		new->tag = NAME_EXPR;
+		new->data.name = assoc[index];
+		return new;
+	}
+	return new;
+}
+
+expr*
+generate_entropic_term(interpreter* const inter, uint64_t base_depth, uint64_t max_depth){
+	if (base_depth == 0 || max_depth == 0){
+		return NULL;
+	}
+	string* assoc = pool_request(inter->mem, sizeof(string)*max_depth);
+	return generate_entropic_term_internal(inter, assoc, 0, 0, base_depth, max_depth);
+}
+
 void
 rebase_worker(interpreter* const inter, string_map* const map, expr* const expression){
 	switch (expression->tag){
@@ -314,6 +365,40 @@ generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uin
 	printf("\n");
 }
 
+void
+generate_entropic_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth){
+	reset_universe(inter);
+	expr* f;
+	while (1){
+		f = generate_entropic_term(inter, 1, f_comp);
+		if (term_bind_depth(f) < arg_count){
+			continue;
+		}
+		if (term_depth(f) < base_comp){
+			continue;
+		}
+		break;
+	}
+	rebase_term(inter, f);
+	show_term(f);
+	printf("\n");
+	expr* z = f;
+	while (arg_count > 0){
+		expr* arg = generate_entropic_term(inter, 1, arg_comp);
+		while (term_depth(arg) < necessary_depth){
+			arg = generate_entropic_term(inter, 1, arg_comp);
+		}
+		show_term(arg);
+		printf("\n");
+		z = apply_term(inter, z, arg);
+		arg_count -= 1;
+	}
+	while (reduce_step(inter, z) != 0){ }
+	rebase_term(inter, z);
+	show_term(z);
+	printf("\n");
+}
+
 uint8_t
 term_depth(expr* const expression){
 	switch (expression->tag){
@@ -342,16 +427,29 @@ term_bind_depth(expr* const expression){
 	}
 	return 0;
 }
+void
+test_puzzles(){
+	printf("Puzzles\n");
+	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+	interpreter inter = interpreter_init(&mem);
+	printf("1\n");
+	generate_puzzle(&inter, 6, 4, 4, 4, 3);
+	pool_dealloc(&mem);
+}
+
+void
+test_entropic_puzzles(){
+	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+	interpreter inter = interpreter_init(&mem);
+	printf("Entropic puzzles\n");
+	printf("1\n");
+	generate_entropic_puzzle(&inter, 6, 4, 4, 4, 3);
+	pool_dealloc(&mem);
+}
 
 int
 main(int argc, char** argv){
 	srand(time(NULL));
-	{
-		printf("Puzzles\n");
-		pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
-		interpreter inter = interpreter_init(&mem);
-		printf("1\n");
-		generate_puzzle(&inter, 6, 4, 4, 4, 3);
-	}
+	test_entropic_puzzles();
 	return 0;
 }
