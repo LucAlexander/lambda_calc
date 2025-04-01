@@ -106,13 +106,16 @@ apply_term(interpreter* const inter, expr* const left, expr* const right){
 }
 
 uint8_t
-reduce_step(interpreter* const inter, expr* const expression){
+reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth){
+	if (max_depth == 0){
+		return 0;
+	}
 	switch (expression->tag){
 	case BIND_EXPR:
-		return reduce_step(inter, expression->data.bind.expression);
+		return reduce_step(inter, expression->data.bind.expression, max_depth-1);
 	case APPL_EXPR:
-		if (reduce_step(inter, expression->data.appl.left) == 0){
-			if (reduce_step(inter, expression->data.appl.right) == 0){
+		if (reduce_step(inter, expression->data.appl.left, max_depth-1) == 0){
+			if (reduce_step(inter, expression->data.appl.right, max_depth-1) == 0){
 				if (expression->data.appl.left->tag != BIND_EXPR){
 					return 0;
 				}
@@ -359,7 +362,7 @@ generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uin
 		z = apply_term(inter, z, arg);
 		arg_count -= 1;
 	}
-	while (reduce_step(inter, z) != 0){ }
+	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0){ }
 	rebase_term(inter, z);
 	show_term(z);
 	printf("\n");
@@ -393,7 +396,7 @@ generate_entropic_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_
 		z = apply_term(inter, z, arg);
 		arg_count -= 1;
 	}
-	while (reduce_step(inter, z) != 0){ }
+	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0){ }
 	rebase_term(inter, z);
 	show_term(z);
 	printf("\n");
