@@ -422,24 +422,29 @@ generate_fuzz_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp
 	printf("Function (hide): ");
 	show_term(f);
 	printf("\n");
-	expr* z = f;
-	while (arg_count > 0){
-		expr* arg = generate_entropic_term(inter, base_depth, arg_comp);
-		while (term_depth(arg) < necessary_depth){
-			arg = generate_entropic_term(inter, base_depth, arg_comp);
+	uint8_t arg_reset = arg_count;
+	for (uint8_t i = 0;i<4;++i){
+		printf("Set %u\n", i);
+		expr* z = deep_copy(inter, NULL, f);
+		while (arg_count > 0){
+			expr* arg = generate_entropic_term(inter, base_depth, arg_comp);
+			while (term_depth(arg) < necessary_depth){
+				arg = generate_entropic_term(inter, base_depth, arg_comp);
+			}
+			printf("arg : ");
+			show_term(arg);
+			printf("\n");
+			z = apply_term(inter, z, arg);
+			arg_count -= 1;
 		}
-		printf("arg : ");
-		show_term(arg);
+		arg_count = arg_reset;
+		uint8_t reductions = 8;
+		while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){ }
+		rebase_term(inter, z);
+		printf("Partial reduction (answer): ");
+		show_term(z);
 		printf("\n");
-		z = apply_term(inter, z, arg);
-		arg_count -= 1;
 	}
-	uint8_t reductions = 8;
-	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){ }
-	rebase_term(inter, z);
-	printf("Partial reduction (answer): ");
-	show_term(z);
-	printf("\n");
 }
 
 uint8_t
@@ -497,7 +502,7 @@ test_fuzz_puzzle(){
 	interpreter inter = interpreter_init(&mem);
 	printf("Fuzz puzzles\n");
 	printf("1\n");
-	generate_fuzz_puzzle(&inter, 6, 4, 4, 4, 3, 2);
+	generate_fuzz_puzzle(&inter, 6, 4, 2, 4, 3, 2);
 	pool_dealloc(&mem);
 }
 
