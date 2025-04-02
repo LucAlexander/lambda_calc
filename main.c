@@ -362,7 +362,8 @@ generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uin
 		z = apply_term(inter, z, arg);
 		arg_count -= 1;
 	}
-	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0){ }
+	uint8_t reductions = 8;
+	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){ }
 	rebase_term(inter, z);
 	show_term(z);
 	printf("\n");
@@ -396,8 +397,34 @@ generate_entropic_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_
 		z = apply_term(inter, z, arg);
 		arg_count -= 1;
 	}
-	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0){ }
+	uint8_t reductions = 8;
+	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){ }
 	rebase_term(inter, z);
+	show_term(z);
+	printf("\n");
+}
+
+void
+generate_fuzz_puzzle(interpreter* const inter, uint8_t base_comp, uint8_t arg_comp){
+	reset_universe(inter);
+	expr* f;
+	while (1){
+		f = generate_entropic_term(inter, 1, base_comp);
+		if (term_depth(f) < base_comp){
+			continue;
+		}
+		break;
+	}
+	rebase_term(inter, f);
+	expr* arg = generate_entropic_term(inter, 1, arg_comp);
+	printf("Input:\n");
+	show_term(arg);
+	printf("\n");
+	expr* z = apply_term(inter, f, arg);
+	uint8_t reductions = 8;
+	while (reduce_step(inter, z, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+	rebase_term(inter, z);
+	printf("Reduced output:\n");
 	show_term(z);
 	printf("\n");
 }
@@ -430,6 +457,7 @@ term_bind_depth(expr* const expression){
 	}
 	return 0;
 }
+
 void
 test_puzzles(){
 	printf("Puzzles\n");
@@ -450,9 +478,19 @@ test_entropic_puzzles(){
 	pool_dealloc(&mem);
 }
 
+void
+test_fuzz_puzzle(){
+	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+	interpreter inter = interpreter_init(&mem);
+	printf("Fuzz puzzles\n");
+	printf("1\n");
+	generate_fuzz_puzzle(&inter, 2, 2);
+	pool_dealloc(&mem);
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
-	test_entropic_puzzles();
+	test_fuzz_puzzle();
 	return 0;
 }
