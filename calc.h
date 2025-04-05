@@ -71,5 +71,15 @@ expr* build_a(interpreter* const inter);
 expr* build_t(interpreter* const inter);
 expr* build_m(interpreter* const inter);
 expr* build_nat(interpreter* const inter, uint8_t n);
+expr* build_and(interpreter* const inter);
+expr* build_or(interpreter* const inter);
+expr* build_not(interpreter* const inter);
+expr* build_succ(interpreter* const inter);
+expr* build_add(interpreter* const inter);
+expr* build_mul(interpreter* const inter);
+expr* build_exp(interpreter* const inter);
+expr* build_T(interpreter* const inter);
+expr* build_F(interpreter* const inter);
+expr* build_cons(interpreter* const inter);
 
 #endif
