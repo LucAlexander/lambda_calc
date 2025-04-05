@@ -476,6 +476,244 @@ term_bind_depth(expr* const expression){
 	return 0;
 }
 
+expr* build_s(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	expr* z = pool_request(inter->mem, sizeof(expr));
+	z->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	y->data.bind.name = next_string(inter);
+	y->data.bind.expression = z;
+	z->data.bind.name = next_string(inter);
+	expr* xzyz = pool_request(inter->mem, sizeof(expr));
+	xzyz->tag = APPL_EXPR;
+	expr* xz = pool_request(inter->mem, sizeof(expr));
+	xz->tag = APPL_EXPR;
+	expr* yz = pool_request(inter->mem, sizeof(expr));
+	yz->tag = APPL_EXPR;
+	z->data.bind.expression = xzyz;
+	xzyz->data.appl.left = xz;
+	xzyz->data.appl.right = yz;
+	expr* inner_x = pool_request(inter->mem, sizeof(expr));
+	inner_x->tag = NAME_EXPR;
+	inner_x->data.name = x->data.bind.name;
+	expr* inner_y = pool_request(inter->mem, sizeof(expr));
+	inner_y->tag = NAME_EXPR;
+	inner_y->data.name = y->data.bind.name;
+	expr* inner_zl = pool_request(inter->mem, sizeof(expr));
+	inner_zl->tag = NAME_EXPR;
+	inner_zl->data.name = z->data.bind.name;
+	expr* inner_zr = deep_copy(inter, NULL, inner_zl);
+	xz->data.appl.left = inner_x;
+	xz->data.appl.right = inner_zl;
+	yz->data.appl.left = inner_y;
+	yz->data.appl.right = inner_zr;
+	return x;
+}
+
+expr* build_k(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	y->data.bind.name = next_string(inter);
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	y->data.bind.expression = x_inner;
+	return x;
+}
+
+expr* build_i(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	x->data.bind.expression = x_inner;
+	return x;
+}
+
+expr* build_b(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	y->data.bind.name = next_string(inter);
+	expr* z = pool_request(inter->mem, sizeof(expr));
+	z->tag = BIND_EXPR;
+	z->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	y->data.bind.expression = z;
+	expr* xyz = pool_request(inter->mem, sizeof(expr));
+	xyz->tag = APPL_EXPR;
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	expr* y_inner = pool_request(inter->mem, sizeof(expr));
+	y_inner->tag = NAME_EXPR;
+	y_inner->data.name = y->data.bind.name;
+	expr* z_inner = pool_request(inter->mem, sizeof(expr));
+	z_inner->tag = NAME_EXPR;
+	z_inner->data.name = z->data.bind.name;
+	expr* yz = pool_request(inter->mem, sizeof(expr));
+	yz->tag = APPL_EXPR;
+	yz->data.appl.left = y_inner;
+	yz->data.appl.right = z_inner;
+	xyz->data.appl.left = x_inner;
+	xyz->data.appl.right = yz;
+	z->data.bind.expression = xyz;
+	return x;
+}
+
+expr* build_c(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	y->data.bind.name = next_string(inter);
+	expr* z = pool_request(inter->mem, sizeof(expr));
+	z->tag = BIND_EXPR;
+	z->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	y->data.bind.expression = z;
+	expr* xzy = pool_request(inter->mem, sizeof(expr));
+	z->data.bind.expression = xzy;
+	xzy->tag = APPL_EXPR;
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	expr* y_inner = pool_request(inter->mem, sizeof(expr));
+	y_inner->tag = NAME_EXPR;
+	y_inner->data.name = y->data.bind.name;
+	expr* z_inner = pool_request(inter->mem, sizeof(expr));
+	z_inner->tag = NAME_EXPR;
+	z_inner->data.name = z->data.bind.name;
+	expr* xz = pool_request(inter->mem, sizeof(expr));
+	xz->tag = APPL_EXPR;
+	xz->data.appl.left = x_inner;
+	xz->data.appl.right = z_inner;
+	xzy->data.appl.left = xz;
+	xzy->data.appl.right = y_inner;
+	return x;
+}
+
+expr* build_w(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	y->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	expr* y_inner = pool_request(inter->mem, sizeof(expr));
+	y_inner->tag = NAME_EXPR;
+	y_inner->data.name = y->data.bind.name;
+	expr* yr_inner = pool_request(inter->mem, sizeof(expr));
+	yr_inner->tag = NAME_EXPR;
+	yr_inner->data.name = y->data.bind.name;
+	expr* xy = pool_request(inter->mem, sizeof(expr));
+	xy->tag = APPL_EXPR;
+	xy->data.appl.left = x_inner;
+	xy->data.appl.right = y_inner;
+	expr* xyy = pool_request(inter->mem, sizeof(expr));
+	xyy->tag = APPL_EXPR;
+	xyy->data.appl.left = xy;
+	xyy->data.appl.right= yr_inner;
+	y->data.bind.expression = xyy;
+	return x;
+}
+
+expr* build_a(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	y->data.bind.name = next_string(inter);
+	expr* y_inner = pool_request(inter->mem, sizeof(expr));
+	y_inner->tag = NAME_EXPR;
+	y_inner->data.name = y->data.bind.name;
+	y->data.bind.expression = y_inner;
+	return x;
+}
+
+expr* build_t(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* y = pool_request(inter->mem, sizeof(expr));
+	y->tag = BIND_EXPR;
+	y->data.bind.name = next_string(inter);
+	x->data.bind.expression = y;
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	expr* y_inner = pool_request(inter->mem, sizeof(expr));
+	y_inner->tag = NAME_EXPR;
+	y_inner->data.name = y->data.bind.name;
+	expr* yx = pool_request(inter->mem, sizeof(expr));
+	yx->tag = APPL_EXPR;
+	yx->data.appl.left = y_inner;
+	yx->data.appl.right = x_inner;
+	y->data.bind.expression = yx;
+	return x;
+}
+
+expr* build_m(interpreter* const inter){
+	expr* x = pool_request(inter->mem, sizeof(expr));
+	x->tag = BIND_EXPR;
+	x->data.bind.name = next_string(inter);
+	expr* x_inner = pool_request(inter->mem, sizeof(expr));
+	x_inner->tag = NAME_EXPR;
+	x_inner->data.name = x->data.bind.name;
+	expr* xr_inner = pool_request(inter->mem, sizeof(expr));
+	xr_inner->tag = NAME_EXPR;
+	xr_inner->data.name = x->data.bind.name;
+	expr* xx = pool_request(inter->mem, sizeof(expr));
+	xx->tag = APPL_EXPR;
+	xx->data.appl.left = x_inner;
+	xx->data.appl.right = xr_inner;
+	x->data.bind.expression = xx;
+	return x;
+}
+
+expr* build_nat(interpreter* const inter, uint8_t n){
+	expr* s = pool_request(inter->mem, sizeof(expr));
+	s->tag = BIND_EXPR;
+	s->data.bind.name = next_string(inter);
+	expr* z = pool_request(inter->mem, sizeof(expr));
+	z->tag = BIND_EXPR;
+	z->data.bind.name = next_string(inter);
+	s->data.bind.expression = z;
+	z->data.bind.expression = pool_request(inter->mem, sizeof(expr));
+	expr* last = z->data.bind.expression;
+	for (uint8_t i = 0;i<n;++i){
+		last->tag = APPL_EXPR;
+		expr* left = pool_request(inter->mem, sizeof(expr));
+		left->tag = NAME_EXPR;
+		left->data.name = s->data.bind.name;
+		last->data.appl.left = left;
+		last->data.appl.right = pool_request(inter->mem, sizeof(expr));
+		last = last->data.appl.right;
+	}
+	last->tag = NAME_EXPR;
+	last->data.name = z->data.bind.name;
+	return s;
+}
+
 void
 test_puzzles(){
 	printf("Puzzles\n");

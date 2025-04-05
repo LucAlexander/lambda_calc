@@ -61,4 +61,15 @@ void generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp
 uint8_t term_depth(expr* const expression);
 uint8_t term_bind_depth(expr* const expression);
 
+expr* build_s(interpreter* const inter);
+expr* build_k(interpreter* const inter);
+expr* build_i(interpreter* const inter);
+expr* build_b(interpreter* const inter);
+expr* build_c(interpreter* const inter);
+expr* build_w(interpreter* const inter);
+expr* build_a(interpreter* const inter);
+expr* build_t(interpreter* const inter);
+expr* build_m(interpreter* const inter);
+expr* build_nat(interpreter* const inter, uint8_t n);
+
 #endif
