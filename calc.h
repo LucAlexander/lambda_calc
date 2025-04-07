@@ -60,6 +60,10 @@ void generate_entropic_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t 
 void generate_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp, uint8_t arg_count, uint8_t arg_comp, uint8_t necessary_depth);
 uint8_t term_depth(expr* const expression);
 uint8_t term_bind_depth(expr* const expression);
+uint8_t self_applies(expr* const e);
+expr* generate_strike_term(interpreter* const inter);
+void generate_strike_puzzle(interpreter* const inter);
+expr* generate_strike_puzzle_helper(interpreter* const inter, uint8_t max_depth);
 
 expr* build_s(interpreter* const inter);
 expr* build_k(interpreter* const inter);

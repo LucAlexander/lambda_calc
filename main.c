@@ -447,6 +447,106 @@ generate_fuzz_puzzle(interpreter* const inter, uint8_t f_comp, uint8_t base_comp
 	}
 }
 
+expr*
+generate_strike_puzzle_helper(interpreter* const inter, uint8_t max_depth){
+	uint8_t choice = rand() % 30;
+	if (max_depth == 0){
+		choice = rand() % 19;
+	}
+	expr* (*f[])(interpreter* const) = {
+		build_s, build_k, build_i,
+		build_b, build_c, build_w,
+		build_a, build_t, build_m,
+		build_and, build_or, build_not,
+		build_succ, build_add, build_mul,
+		build_exp, build_T, build_F,
+		build_cons
+	};
+	if (choice < 19){
+		return f[choice](inter);
+	}
+	if (choice < 22){
+		choice -= 19;
+		return build_nat(inter, choice);
+	}
+	expr* apply = pool_request(inter->mem, sizeof(expr));
+	apply->tag = APPL_EXPR;
+	apply->data.appl.left = generate_strike_puzzle_helper(inter, max_depth-1);
+	apply->data.appl.right = generate_strike_puzzle_helper(inter, max_depth-1);
+	return apply;
+}
+
+void
+generate_strike_puzzle(interpreter* const inter){
+	reset_universe(inter);
+	printf("f: ");
+	expr* f = generate_strike_term(inter);
+	show_term(f);
+	printf("\n");
+	uint8_t args = term_bind_depth(f);
+	while (args-- > 0){
+		expr* arg = generate_strike_term(inter);
+		printf("arg: ");
+		show_term(arg);
+		printf("\n");
+		f = apply_term(inter, f, arg);
+	}
+	uint8_t reductions = 8;
+	while (reduce_step(inter, f, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+	rebase_term(inter, f);
+	printf("Final: ");
+	show_term(f);
+	printf("\n");
+}
+
+expr*
+generate_strike_term(interpreter* const inter){
+	expr* initial = pool_request(inter->mem, sizeof(expr));
+	while (1){
+		initial->tag = APPL_EXPR;
+		initial->data.appl.left = generate_strike_puzzle_helper(inter, 1);
+		initial->data.appl.right = generate_strike_puzzle_helper(inter, 1);
+		uint8_t reductions = 8;
+		uint8_t appl_break = 0;
+		while (reduce_step(inter, initial, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){
+			if (self_applies(initial) == 1){
+				appl_break = 1;
+				break;
+			}
+		}
+		if (appl_break == 1){
+			continue;
+		}
+		if (term_depth(initial) - term_bind_depth(initial) < 2){
+			continue;
+		}
+		if (initial->tag != BIND_EXPR){
+			continue;
+		}
+		break;
+	}
+	return initial;
+}
+
+uint8_t
+self_applies(expr* const e){
+	switch (e->tag){
+	case BIND_EXPR:
+		return self_applies(e->data.bind.expression);
+	case APPL_EXPR:
+		if (e->data.appl.left->tag == NAME_EXPR
+		 && e->data.appl.right->tag == NAME_EXPR){
+			if (strncmp(e->data.appl.left->data.name.str, e->data.appl.right->data.name.str, e->data.appl.left->data.name.len) == 0){
+				return 1;
+			}
+		}
+		return 0;
+	case NAME_EXPR:
+		return 0;
+	}
+	return 0;
+}
+
 uint8_t
 term_depth(expr* const expression){
 	switch (expression->tag){
@@ -963,9 +1063,19 @@ test_fuzz_puzzle(){
 	pool_dealloc(&mem);
 }
 
+void
+test_strike_puzzle(){
+	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+	interpreter inter = interpreter_init(&mem);
+	printf("Strike puzzles\n");
+	printf("1\n");
+	generate_strike_puzzle(&inter);
+	pool_dealloc(&mem);
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
-	//test_fuzz_puzzle();
+	test_strike_puzzle();
 	return 0;
 }
