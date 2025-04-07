@@ -1,3 +1,2 @@
-Main includes a test scope that displays functionality.
-
-No parser is included at the moment.
+There are a number of puzzle generation functions which display the main functionality. 
+Main includes a test scope that show use of the parser.
