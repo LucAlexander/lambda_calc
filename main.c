@@ -2,9 +2,12 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <ctype.h>
+
 #include "calc.h"
 
 MAP_IMPL(string)
+MAP_IMPL(TOKEN)
 
 string
 next_string(interpreter* const inter){
@@ -1073,9 +1076,203 @@ test_strike_puzzle(){
 	pool_dealloc(&mem);
 }
 
+uint8_t
+lex_natural(parser* const parse, char* cstr, uint64_t i, token* t){
+	t->data.nat = 0;
+	t->tag = NATURAL_TOKEN;
+	char c = cstr[i];
+	while (c != '\0'){
+		if (isdigit(c) == 0){
+			break;
+		}
+		t->data.nat *= 10;
+		t->data.nat += (c-48);
+		i += 1;
+		c = cstr[i];
+	}
+	return i;
+}
+
+uint8_t
+lex_identifier(parser* const parse, char* cstr, uint64_t i, token* t){
+	t->data.name.str = &cstr[i];
+	t->data.name.len = 0;
+	t->tag = IDENTIFIER_TOKEN;
+	char c = cstr[i];
+	while (c != '\0'){
+		if (!isalnum(c) && c != '_'){
+			break;
+		}
+		t->data.name.len += 1;
+		i += 1;
+		c = cstr[i];
+	}
+	char* name  = t->data.name.str;
+	uint64_t size = t->data.name.len;
+	char save = name[size];
+	name[size] = '\0';
+	TOKEN* tok = TOKEN_map_access(parse->combinators, name);
+	if (tok != NULL){
+		t->tag = *tok;
+	}
+	name[size] = save;
+	return i;
+}
+
+void
+lex_cstr(parser* const parse, char* cstr){
+	uint64_t i = 0;
+	char c = cstr[i];
+	parse->tokens = pool_request(parse->token_pool, sizeof(token));
+	while (c != '\0'){
+		token* t = &parse->tokens[parse->token_count++];
+		switch (c){
+		case ' ':
+		case '\n':
+		case '\r':
+		case '\t':
+			i += 1;
+			c = cstr[i];
+			parse->token_count -= 1;
+			continue;
+		case LAMBDA_TOKEN:
+		case BIND_TOKEN:
+		case OPEN_PAREN_TOKEN:
+		case CLOSE_PAREN_TOKEN:
+			t->tag = c;
+			pool_request(parse->token_pool, sizeof(token));
+			i += 1;
+			c = cstr[i];
+			continue;
+		}
+		if (isdigit(c)){
+			i = lex_natural(parse, cstr, i, t);
+		}
+		else if (isalpha(c) || c == '_'){
+			i = lex_identifier(parse, cstr, i, t);
+		}
+		else {
+			fprintf(stderr, "Unexpected character '%c'\n", c);
+			return;
+		}
+		c = cstr[i];
+		pool_request(parse->token_pool, sizeof(token));
+	}
+}
+
+void
+show_tokens(parser* const parse){
+	for (uint64_t i = 0;i<parse->token_count;++i){
+		token t = parse->tokens[i];
+		printf("[ ");
+		switch (t.tag){
+		case LAMBDA_TOKEN:
+		case BIND_TOKEN:
+		case OPEN_PAREN_TOKEN:
+			printf("'%c'", t.tag);
+			break;
+		case IDENTIFIER_TOKEN:
+			char* name = t.data.name.str;
+			uint64_t size = t.data.name.len;
+			char save = name[size];
+			name[size] = '\0';
+			printf("IDENTIFIER %lu '%s'", size, name);
+			name[size] = save;
+			break;
+		case NATURAL_TOKEN:
+			printf("NAT %lu", t.data.nat);
+			break;
+		default:
+			printf("COMBINATOR %u", t.tag);
+			break;
+		}
+		printf(" ] ");
+	}
+	printf("\n");
+}
+
+expr*
+parse_lambda(parser* const parse, char* c, char ending){
+	return NULL;
+}
+
+expr*
+parse_term_recursive(parser* const parse, char* c, char ending){
+	expr* outer = pool_request(parse->inter->mem, sizeof(expr));
+	expr* term = outer;
+	uint8_t apply = 0;
+	while (*c != ending){
+		c += 1;
+		switch (*c){
+		case LAMBDA_TOKEN:
+			term = parse_lambda(parse, c, ending);
+			continue;
+		case OPEN_PAREN_TOKEN:
+			term = parse_term_recursive(parse, c, CLOSE_PAREN_TOKEN);
+			apply = 1;
+			continue;
+		}
+	}
+	return outer;
+}
+
+void
+populate_combinators(TOKEN_map* map){
+	uint64_t count = CONS_TOKEN-NATURAL_TOKEN;
+	TOKEN* tokens = pool_request(map->mem, sizeof(TOKEN)* count);
+	for (uint8_t i = 0;i<count;++i){
+		tokens[i] = i+NATURAL_TOKEN;
+	}
+	TOKEN_map_insert(map, "S", tokens++);
+	TOKEN_map_insert(map, "K", tokens++);
+	TOKEN_map_insert(map, "I", tokens++);
+	TOKEN_map_insert(map, "B", tokens++);
+	TOKEN_map_insert(map, "C", tokens++);
+	TOKEN_map_insert(map, "W", tokens++);
+	TOKEN_map_insert(map, "A", tokens++);
+	TOKEN_map_insert(map, "T", tokens++);
+	TOKEN_map_insert(map, "M", tokens++);
+	TOKEN_map_insert(map, "&", tokens++);
+	TOKEN_map_insert(map, "|", tokens++);
+	TOKEN_map_insert(map, "!", tokens++);
+	TOKEN_map_insert(map, "SUCC", tokens++);
+	TOKEN_map_insert(map, "+", tokens++);
+	TOKEN_map_insert(map, "*", tokens++);
+	TOKEN_map_insert(map, "^", tokens++);
+	TOKEN_map_insert(map, "TRUE", tokens++);
+	TOKEN_map_insert(map, "FALSE", tokens++);
+	TOKEN_map_insert(map, "CONS", tokens++);
+}
+
+expr*
+parse_term(char* cstr, interpreter* const inter){
+	string_map names = string_map_init(inter->mem);
+	TOKEN_map combinators = TOKEN_map_init(inter->mem);
+	populate_combinators(&combinators);
+	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
+	parser parse = {
+		.inter = inter,
+		.names = &names,
+		.combinators = &combinators,
+		.token_pool = &tokens,
+		.token_count = 0
+	};
+	lex_cstr(&parse, cstr);
+	show_tokens(&parse);
+	expr* term = parse_term_recursive(&parse, cstr, '\0');
+	pool_dealloc(&tokens);
+	return NULL;
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
-	test_strike_puzzle();
+	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
+	interpreter inter = interpreter_init(&mem);
+	uint64_t len = strlen("\\x.\\y.CONS 4 x");
+	char* term = pool_request(&mem, len+1);
+	strncpy(term, "\\x.\\y.CONS 4 x", len);
+	printf("%s\n", term);
+	parse_term(term, &inter);
 	return 0;
 }

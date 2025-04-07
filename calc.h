@@ -86,4 +86,58 @@ expr* build_T(interpreter* const inter);
 expr* build_F(interpreter* const inter);
 expr* build_cons(interpreter* const inter);
 
+typedef enum TOKEN {
+	LAMBDA_TOKEN='\\',
+	BIND_TOKEN='.',
+	OPEN_PAREN_TOKEN=')',
+	CLOSE_PAREN_TOKEN='(',
+	IDENTIFIER_TOKEN=100,
+	NATURAL_TOKEN,
+	S_TOKEN,
+	K_TOKEN,
+	I_TOKEN,
+	B_TOKEN,
+	C_TOKEN,
+	W_TOKEN,
+	A_TOKEN,
+	T_TOKEN,
+	M_TOKEN,
+	AND_TOKEN,
+	OR_TOKEN,
+	NOT_TOKEN,
+	SUCC_TOKEN,
+	ADD_TOKEN,
+	MUL_TOKEN,
+	EXP_TOKEN,
+	TRUE_TOKEN,
+	FALSE_TOKEN,
+	CONS_TOKEN,
+} TOKEN;
+
+MAP_DEF(TOKEN)
+
+typedef struct token {
+	union {
+		string name;
+		uint64_t nat;
+	} data;
+	TOKEN tag;
+} token;
+
+typedef struct parser {
+	interpreter* const inter;
+	string_map* names;
+	TOKEN_map* combinators;
+	pool* token_pool;
+	token* tokens;
+	uint64_t token_count;
+} parser;
+
+uint8_t lex_natural(parser* const parse, char* cstr, uint64_t i, token* t);
+uint8_t lex_identifier(parser* const parse, char* cstr, uint64_t i, token* t);
+void lex_cstr(parser* const parse, char* cstr);
+void show_tokens(parser* const parse);
+void populate_combinators(TOKEN_map* map);
+expr* parse_term(char* cstr, interpreter* const inter);
+
 #endif
