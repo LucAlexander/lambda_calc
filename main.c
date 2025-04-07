@@ -30,6 +30,7 @@ next_string(interpreter* const inter){
 	if (grow == 1){
 		inter->next.str[inter->next.len] = 'a';
 		inter->next.len += 1;
+		pool_request(inter->mem, 1);
 		inter->next.str[inter->next.len] = '\0';
 	}
 	return new;
@@ -1111,6 +1112,9 @@ lex_identifier(parser* const parse, char* cstr, uint64_t i, token* t){
 	uint64_t size = t->data.name.len;
 	char save = name[size];
 	name[size] = '\0';
+	char* new = pool_request(parse->inter->mem, t->data.name.len+1);
+	strncpy(new, t->data.name.str, t->data.name.len);
+	t->data.name.str = new;
 	TOKEN* tok = TOKEN_map_access(parse->combinators, name);
 	if (tok != NULL){
 		t->tag = *tok;
@@ -1169,6 +1173,7 @@ show_tokens(parser* const parse){
 		case LAMBDA_TOKEN:
 		case BIND_TOKEN:
 		case OPEN_PAREN_TOKEN:
+		case CLOSE_PAREN_TOKEN:
 			printf("'%c'", t.tag);
 			break;
 		case IDENTIFIER_TOKEN:
@@ -1192,25 +1197,139 @@ show_tokens(parser* const parse){
 }
 
 expr*
-parse_lambda(parser* const parse, char* c, char ending){
+parse_lambda(parser* const parse, uint8_t paren){
+	expr* term = pool_request(parse->inter->mem, sizeof(expr));
+	token* t = &parse->tokens[parse->token_index];
+	if (t->tag != IDENTIFIER_TOKEN){
+		fprintf(stderr, "Expected identifier to bind\n");
+		return NULL;
+	}
+	parse->token_index += 1;
+	term->tag = BIND_EXPR;
+	term->data.bind.name = next_string(parse->inter);
+	string_map_insert(parse->names, t->data.name.str, &term->data.bind.name);
+	t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	if (t->tag != BIND_TOKEN){
+		fprintf(stderr, "Expected bind token after lambda identifier\n");
+		return NULL;
+	}
+	term->data.bind.expression = parse_term_recursive(parse, paren);
+	return term;
+}
+
+expr*
+parse_body_term(parser* const parse, token* t, uint8_t paren){
+	expr* outer;
+	switch (t->tag){
+	case LAMBDA_TOKEN:
+		return parse_lambda(parse, paren);
+	case BIND_TOKEN:
+		fprintf(stderr, "Unexpected bind token\n");
+		return NULL;
+	case OPEN_PAREN_TOKEN:
+		outer = parse_term_recursive(parse, 1);
+		if (parse->tokens[parse->token_index].tag != CLOSE_PAREN_TOKEN){
+			fprintf(stderr, "Expected ) to end expression\n");
+			return NULL;
+		}
+		parse->token_index += 1;
+		return outer;
+	case CLOSE_PAREN_TOKEN:
+		fprintf(stderr, "Unexpected )\n");
+		return NULL;
+	case IDENTIFIER_TOKEN:
+		outer = pool_request(parse->inter->mem, sizeof(expr));
+		outer->tag = NAME_EXPR;
+		char* s = t->data.name.str;
+		uint64_t size = t->data.name.len;
+		char save = s[size];
+		s[size] = '\0';
+		string* name = string_map_access(parse->names, t->data.name.str);
+		if (name == NULL){
+			fprintf(stderr, "Unknown bound name %s\n", t->data.name.str);
+			return NULL;
+		}
+		s[size] = save;
+		outer->data.name = *name;
+		return outer;
+	case NATURAL_TOKEN:
+		return build_nat(parse->inter, t->data.nat);
+	case S_TOKEN:
+		return build_s(parse->inter);
+	case K_TOKEN:
+		return build_k(parse->inter);
+	case I_TOKEN:
+		return build_i(parse->inter);
+	case B_TOKEN:
+		return build_b(parse->inter);
+	case C_TOKEN:
+		return build_c(parse->inter);
+	case W_TOKEN:
+		return build_w(parse->inter);
+	case A_TOKEN:
+		return build_a(parse->inter);
+	case T_TOKEN:
+		return build_t(parse->inter);
+	case M_TOKEN:
+		return build_m(parse->inter);
+	case AND_TOKEN:
+		return build_and(parse->inter);
+	case OR_TOKEN:
+		return build_or(parse->inter);
+	case NOT_TOKEN:
+		return build_not(parse->inter);
+	case SUCC_TOKEN:
+		return build_succ(parse->inter);
+	case ADD_TOKEN:
+		return build_add(parse->inter);
+	case MUL_TOKEN:
+		return build_mul(parse->inter);
+	case EXP_TOKEN:
+		return build_exp(parse->inter);
+	case TRUE_TOKEN:
+		return build_T(parse->inter);
+	case FALSE_TOKEN:
+		return build_F(parse->inter);
+	case CONS_TOKEN:
+		return build_cons(parse->inter);
+	}
 	return NULL;
 }
 
 expr*
-parse_term_recursive(parser* const parse, char* c, char ending){
-	expr* outer = pool_request(parse->inter->mem, sizeof(expr));
-	expr* term = outer;
-	uint8_t apply = 0;
-	while (*c != ending){
-		c += 1;
-		switch (*c){
-		case LAMBDA_TOKEN:
-			term = parse_lambda(parse, c, ending);
-			continue;
-		case OPEN_PAREN_TOKEN:
-			term = parse_term_recursive(parse, c, CLOSE_PAREN_TOKEN);
-			apply = 1;
-			continue;
+parse_term_recursive(parser* const parse, uint8_t paren){
+	expr* outer;
+	uint8_t initial = 1;
+	while (parse->token_index < parse->token_count){
+		token* t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+		if (initial == 1){
+			if (t->tag == CLOSE_PAREN_TOKEN){
+				fprintf(stderr, "Empty expression\n");
+				return NULL;
+			}
+			outer = parse_body_term(parse, t, paren);
+			if (outer == NULL){
+				return NULL;
+			}
+			initial = 0;
+		}
+		else {
+			if (t->tag == CLOSE_PAREN_TOKEN){
+				if (paren == 1){
+					parse->token_index -= 1;
+					return outer;
+				}
+			}
+			expr* new_outer = pool_request(parse->inter->mem, sizeof(expr));
+			new_outer->tag = APPL_EXPR;
+			new_outer->data.appl.left = outer;
+			outer = new_outer;
+			outer->data.appl.right = parse_body_term(parse, t, paren);
+			if (outer->data.appl.right == NULL){
+				return NULL;
+			}
 		}
 	}
 	return outer;
@@ -1221,7 +1340,7 @@ populate_combinators(TOKEN_map* map){
 	uint64_t count = CONS_TOKEN-NATURAL_TOKEN;
 	TOKEN* tokens = pool_request(map->mem, sizeof(TOKEN)* count);
 	for (uint8_t i = 0;i<count;++i){
-		tokens[i] = i+NATURAL_TOKEN;
+		tokens[i] = i+S_TOKEN;
 	}
 	TOKEN_map_insert(map, "S", tokens++);
 	TOKEN_map_insert(map, "K", tokens++);
@@ -1232,13 +1351,13 @@ populate_combinators(TOKEN_map* map){
 	TOKEN_map_insert(map, "A", tokens++);
 	TOKEN_map_insert(map, "T", tokens++);
 	TOKEN_map_insert(map, "M", tokens++);
-	TOKEN_map_insert(map, "&", tokens++);
-	TOKEN_map_insert(map, "|", tokens++);
-	TOKEN_map_insert(map, "!", tokens++);
+	TOKEN_map_insert(map, "AND", tokens++);
+	TOKEN_map_insert(map, "OR", tokens++);
+	TOKEN_map_insert(map, "NOT", tokens++);
 	TOKEN_map_insert(map, "SUCC", tokens++);
-	TOKEN_map_insert(map, "+", tokens++);
-	TOKEN_map_insert(map, "*", tokens++);
-	TOKEN_map_insert(map, "^", tokens++);
+	TOKEN_map_insert(map, "ADD", tokens++);
+	TOKEN_map_insert(map, "MUL", tokens++);
+	TOKEN_map_insert(map, "EXP", tokens++);
 	TOKEN_map_insert(map, "TRUE", tokens++);
 	TOKEN_map_insert(map, "FALSE", tokens++);
 	TOKEN_map_insert(map, "CONS", tokens++);
@@ -1255,11 +1374,15 @@ parse_term(char* cstr, interpreter* const inter){
 		.names = &names,
 		.combinators = &combinators,
 		.token_pool = &tokens,
-		.token_count = 0
+		.token_count = 0,
+		.token_index = 0
 	};
 	lex_cstr(&parse, cstr);
 	show_tokens(&parse);
-	expr* term = parse_term_recursive(&parse, cstr, '\0');
+	expr* term = parse_term_recursive(&parse, 0);
+	printf("Parsed term: ");
+	show_term(term);
+	printf("\n");
 	pool_dealloc(&tokens);
 	return NULL;
 }
@@ -1269,10 +1392,9 @@ main(int argc, char** argv){
 	srand(time(NULL));
 	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
 	interpreter inter = interpreter_init(&mem);
-	uint64_t len = strlen("\\x.\\y.CONS 4 x");
+	uint64_t len = strlen("(\\x.\\y.CONS 4 (x y)) \\z.B");
 	char* term = pool_request(&mem, len+1);
-	strncpy(term, "\\x.\\y.CONS 4 x", len);
-	printf("%s\n", term);
+	strncpy(term, "(\\x.\\y.CONS 4 (x y)) \\z.B", len);
 	parse_term(term, &inter);
 	return 0;
 }

@@ -89,8 +89,8 @@ expr* build_cons(interpreter* const inter);
 typedef enum TOKEN {
 	LAMBDA_TOKEN='\\',
 	BIND_TOKEN='.',
-	OPEN_PAREN_TOKEN=')',
-	CLOSE_PAREN_TOKEN='(',
+	OPEN_PAREN_TOKEN='(',
+	CLOSE_PAREN_TOKEN=')',
 	IDENTIFIER_TOKEN=100,
 	NATURAL_TOKEN,
 	S_TOKEN,
@@ -131,12 +131,16 @@ typedef struct parser {
 	pool* token_pool;
 	token* tokens;
 	uint64_t token_count;
+	uint64_t token_index;
 } parser;
 
 uint8_t lex_natural(parser* const parse, char* cstr, uint64_t i, token* t);
 uint8_t lex_identifier(parser* const parse, char* cstr, uint64_t i, token* t);
 void lex_cstr(parser* const parse, char* cstr);
 void show_tokens(parser* const parse);
+expr* parse_lambda(parser* const parse, uint8_t paren);
+expr* parse_body_term(parser* const parse, token* t, uint8_t paren);
+expr* parse_term_recursive(parser* const parse, uint8_t paren);
 void populate_combinators(TOKEN_map* map);
 expr* parse_term(char* cstr, interpreter* const inter);
 
