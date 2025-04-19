@@ -151,6 +151,27 @@ reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth)
 }
 
 void
+show_term_unambiguous(expr* const ex){
+	switch (ex->tag){
+	case BIND_EXPR:
+		printf("(%s:", ex->data.bind.name.str);
+		show_term_unambiguous(ex->data.bind.expression);
+		printf(")");
+		return;
+	case APPL_EXPR:
+		printf("(");
+		show_term_unambiguous(ex->data.appl.left);
+		printf(" ");
+		show_term_unambiguous(ex->data.appl.right);
+		printf(")");
+		return;
+	case NAME_EXPR:
+		printf("%s", ex->data.name.str);
+		return;
+	}
+}
+
+void
 show_term_helper(expr* const ex, uint8_t special){
 	switch (ex->tag){
 	case BIND_EXPR:
@@ -1533,6 +1554,8 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 			while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
 			rebase_term(inter, &applied);
 			show_term(&applied);
+			printf("\n");
+			show_term_unambiguous(&applied);
 			printf("\n");
 			uint8_t depth = term_depth(&applied);
 			if (depth > found_depth){

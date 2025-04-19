@@ -50,6 +50,7 @@ expr* deep_copy(interpreter* const inter, string_map* map, expr* const target);
 expr* deep_copy_replace(interpreter* const inter, string_map* map, expr* const target, char* replace, expr* const replace_term);
 expr* apply_term(interpreter* const inter, expr* const left, expr* const right);
 uint8_t reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth);
+void show_term_unambiguous(expr* const ex);
 void show_term_helper(expr* const ex, uint8_t special);
 void show_term(expr* const ex);
 expr* generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth);
