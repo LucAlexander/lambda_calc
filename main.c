@@ -145,23 +145,34 @@ reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth)
 }
 
 void
-show_term(expr* const ex){
+show_term_helper(expr* const ex, expr* const left){
 	switch (ex->tag){
 	case BIND_EXPR:
 		printf("\\%s.", ex->data.bind.name.str);
 		show_term(ex->data.bind.expression);
 		return;
 	case APPL_EXPR:
+		if (left == NULL && ex->data.appl.right->tag != BIND_EXPR){
+			show_term(ex->data.appl.left);
+			printf(" ");
+			show_term_helper(ex->data.appl.right, ex->data.appl.left);
+			return;
+		}
 		printf("(");
 		show_term(ex->data.appl.left);
 		printf(" ");
-		show_term(ex->data.appl.right);
+		show_term_helper(ex->data.appl.right, ex->data.appl.left);
 		printf(")");
 		return;
 	case NAME_EXPR:
 		printf("%s", ex->data.name.str);
 		return;
 	}
+}
+
+void
+show_term(expr* const ex){
+	show_term_helper(ex, NULL);
 }
 
 expr*
@@ -1406,7 +1417,8 @@ parse_term(char* cstr, interpreter* const inter){
 	return term;
 }
 
-void add_to_universe(interpreter* const inter, char* name, char* eval){
+void
+add_to_universe(interpreter* const inter, char* name, char* eval){
 	uint64_t len = strnlen(name, NAME_MAX);
 	uint64_t eval_len = strnlen(eval, NAME_MAX*4);
 	char* term_name = pool_request(inter->mem, len+1);
@@ -1420,24 +1432,91 @@ void add_to_universe(interpreter* const inter, char* name, char* eval){
 	expr_map_insert(&inter->universe, term_name, term);
 }
 
+void
+generate_combinator_strike_puzzle(interpreter* const inter){
+	reset_universe(inter);
+	add_to_universe(inter, "flip", "T");
+	add_to_universe(inter, "const", "K");
+	add_to_universe(inter, "cons", "CONS");
+	add_to_universe(inter, "id", "I");
+	add_to_universe(inter, "and", "AND");
+	add_to_universe(inter, "or", "OR");
+	add_to_universe(inter, "not", "NOT");
+	add_to_universe(inter, "true", "TRUE");
+	add_to_universe(inter, "false", "FALSE");
+	add_to_universe(inter, "succ", "SUCC");
+	add_to_universe(inter, "add", "ADD");
+	add_to_universe(inter, "mul", "MUL");
+	add_to_universe(inter, "exp", "EXP");
+	add_to_universe(inter, "0", "FALSE");
+	add_to_universe(inter, "1", "\\x.\\y.x y");
+	add_to_universe(inter, "2", "\\x.\\y.x (x y)");
+	add_to_universe(inter, "compose", "\\x.\\y.\\z.x (y z)");
+	add_to_universe(inter, "s", "S");
+	add_to_universe(inter, "if", "\\x.\\y.\\z.x y z");
+	char* items[] = {
+		"flip", "const", "cons", "id", "and", "or", "not", "true", "false",
+		"succ", "add", "mul", "exp", "0", "1", "2", "compose", "s", "if"
+	};
+	uint64_t count = 19;
+	uint64_t max_width = 5;
+	uint64_t min_width = 3;
+	uint64_t width = (rand() % (max_width - min_width)) + min_width;
+	expr* f = pool_request(inter->mem, sizeof(expr));
+	expr* outer = f;
+	while (width > 0) {
+		outer->tag = APPL_EXPR;
+		uint64_t choice = rand()% count;
+		char* token = items[choice];
+		uint64_t len = strnlen(token, NAME_MAX);
+		char* copy = pool_request(inter->mem, len+1);
+		strncpy(copy, token, len);
+		expr* name = pool_request(inter->mem, sizeof(expr));
+		name->tag = NAME_EXPR;
+		name->data.name.str = copy;
+		name->data.name.len = len;
+		if (width == 1){
+			*outer = *name;
+			break;
+		}
+		switch (rand()%2){
+		case 0:
+			outer->data.appl.left = name;
+			outer->data.appl.right = pool_request(inter->mem, sizeof(expr));
+			outer = outer->data.appl.right;
+			break;
+		case 1:
+			outer->data.appl.right = name;
+			outer->data.appl.left = pool_request(inter->mem, sizeof(expr));
+			outer = outer->data.appl.left;
+			break;
+		}
+		width -= 1;
+	}
+	rebase_term(inter, f);
+	show_term(f);
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
 	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
 	interpreter inter = interpreter_init(&mem);
-	add_to_universe(&inter, "flip", "\\x.\\y.y x");
-	add_to_universe(&inter, "const", "\\x.\\y.x");
-	uint64_t len = strlen("(\\x.\\y.const flip x y) TRUE FALSE");
-	char* term = pool_request(&mem, len+1);
-	strncpy(term, "(\\x.\\y.const flip x y) TRUE FALSE", len);
-	expr* result = parse_term(term, &inter);
-	show_term(result);
-	printf("\n");
-	uint8_t reductions = 8;
-	while (reduce_step(&inter, result, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
-	rebase_term(&inter, result);
-	printf("Final: ");
-	show_term(result);
-	printf("\n");
+	{// example functionality
+		add_to_universe(&inter, "flip", "\\x.\\y.y x");
+		add_to_universe(&inter, "const", "\\x.\\y.x");
+		uint64_t len = strlen("(\\x.\\y.const flip x y) TRUE FALSE");
+		char* term = pool_request(&mem, len+1);
+		strncpy(term, "(\\x.\\y.const flip x y) TRUE FALSE", len);
+		expr* result = parse_term(term, &inter);
+		show_term(result);
+		printf("\n");
+		uint8_t reductions = 8;
+		while (reduce_step(&inter, result, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+		rebase_term(&inter, result);
+		printf("Final: ");
+		show_term(result);
+	 	printf("\n");
+	}
 	return 0;
 }

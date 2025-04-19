@@ -50,6 +50,7 @@ expr* deep_copy(interpreter* const inter, string_map* map, expr* const target);
 expr* deep_copy_replace(interpreter* const inter, string_map* map, expr* const target, char* replace, expr* const replace_term);
 expr* apply_term(interpreter* const inter, expr* const left, expr* const right);
 uint8_t reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth);
+void show_term_helper(expr* const ex, expr* const left);
 void show_term(expr* const ex);
 expr* generate_term_internal(interpreter* const inter, string* const assoc, uint64_t current_index, uint64_t current_depth, uint64_t max_depth);
 expr* generate_term(interpreter* const inter, uint64_t depth);
@@ -148,5 +149,6 @@ void populate_combinators(TOKEN_map* map);
 expr* parse_term(char* cstr, interpreter* const inter);
 
 void add_to_universe(interpreter* const inter, char* name, char* eval);
+void generate_combinator_strike_puzzle(interpreter* const inter);
 
 #endif
