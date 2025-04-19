@@ -1533,26 +1533,24 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		"succ", "add", "mul", "exp", "0", "1", "2", "s", "compose", "if"
 	};
 	uint64_t count = 18;
-	uint64_t min_term_depth = 2;
+	uint64_t min_term_depth = 1;
 	uint64_t max_term_depth = 4;
 	uint64_t found_depth = max_term_depth+1;
 	uint64_t other_found_depth = 0;
+	uint8_t arg_count = 3;
+	expr* fun;
+	expr* args[arg_count];
+	expr* results[arg_count];
 	while (found_depth > max_term_depth || other_found_depth < min_term_depth){
 		found_depth = 0;
 		other_found_depth = min_term_depth+1;
 		expr* f = generate_combinator_term(inter, items, count, 5, 3);
+		fun = f;
 		rebase_term(inter, f);
-		printf("Function: ");
-		show_term(f);
-		printf("                         ");
-		show_term_unambiguous(f);
-		printf("\n");
-		for (uint64_t i = 0;i<3;++i){
+		for (uint64_t i = 0;i<arg_count;++i){
 			expr* copy = deep_copy(inter, NULL, f);
 			expr* arg = generate_combinator_term(inter, items, count, max_term_depth, min_term_depth);
-			printf("Arg %lu: ", i);
-			show_term(arg);
-			printf(" -> ");
+			args[i] = deep_copy(inter, NULL, arg);
 			expr* applied = pool_request(inter->mem, sizeof(expr));
 			applied->tag = APPL_EXPR;
 			applied->data.appl.left=copy;
@@ -1560,10 +1558,7 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 			int8_t reductions = 8;
 			while (reduce_step(inter, applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
 			rebase_term(inter, applied);
-			show_term(applied);
-			printf("                         ");
-			show_term_unambiguous(applied);
-			printf("\n");
+			results[i] = applied;
 			uint8_t depth = term_depth(applied);
 			if (depth > found_depth){
 				found_depth = depth;
@@ -1572,8 +1567,68 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 				other_found_depth = depth;
 			}
 		}
+		if (compare_terms(inter->mem, args[0], args[1]) == 1){
+			found_depth = max_term_depth+1;
+		}
+		if (compare_terms(inter->mem, results[0], results[1]) == 1){
+			found_depth = max_term_depth+1;
+		}
+	}
+	for (uint64_t i = 0;i<arg_count;++i){
+		printf("f ");
+		show_term(args[i]);
+		printf(" -> ");
+		show_term(results[i]);
+		printf("\n");
+		printf("f ");
+		show_term_unambiguous(args[i]);
+		printf(" -> ");
+		show_term_unambiguous(results[i]);
+		printf("\n");
 		printf("\n");
 	}
+	printf("f: \033[8m");
+	show_term(fun);
+	printf("\033[0m\n");
+	printf("f: \033[8m");
+	show_term_unambiguous(fun);
+	printf("\033[0m\n");
+}
+
+uint8_t
+compare_terms_helper(expr* const a, expr* const b, string_map* const map){
+	if (a->tag != b->tag){
+		return 0;
+	}
+	switch (a->tag){
+	case BIND_EXPR:
+		char* copy = pool_request(map->mem, a->data.bind.name.len+1);
+		strncpy(copy, a->data.bind.name.str, a->data.bind.name.len);
+		string_map_insert(map, copy, &b->data.bind.name);
+		return compare_terms_helper(a->data.bind.expression, b->data.bind.expression, map);
+	case APPL_EXPR:
+		return compare_terms_helper(a->data.appl.left, b->data.appl.left, map)
+		     & compare_terms_helper(a->data.appl.right, b->data.appl.right, map);
+	case NAME_EXPR:
+		string* isb = string_map_access(map, a->data.name.str);
+		if (isb == NULL){
+			return 0;
+		}
+		if (isb->len != b->data.name.len){
+			return 0;
+		}
+		return !strncmp(isb->str, b->data.name.str, isb->len);
+	}
+	return 0;
+}
+
+uint8_t
+compare_terms(pool* const mem, expr* const a, expr* const b){
+	pool_save(mem);
+	string_map map = string_map_init(mem);
+	uint8_t result = compare_terms_helper(a, b, &map);
+	pool_load(mem);
+	return result;
 }
 
 int

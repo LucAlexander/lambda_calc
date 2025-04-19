@@ -151,5 +151,7 @@ expr* parse_term(char* cstr, interpreter* const inter);
 
 void add_to_universe(interpreter* const inter, char* name, char* eval);
 void generate_combinator_strike_puzzle(interpreter* const inter);
+uint8_t compare_terms_helper(expr* const a, expr* const b, string_map* const map);
+uint8_t compare_terms(pool* const mem, expr* const a, expr* const b);
 
 #endif
