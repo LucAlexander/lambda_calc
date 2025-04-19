@@ -1569,9 +1569,17 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		}
 		if (compare_terms(inter->mem, args[0], args[1]) == 1){
 			found_depth = max_term_depth+1;
+			continue;
 		}
 		if (compare_terms(inter->mem, results[0], results[1]) == 1){
 			found_depth = max_term_depth+1;
+			continue;
+		}
+		for (uint64_t i = 0;i<arg_count;++i){
+			if (term_contained(inter->mem, args[i], results[i]) == 1){
+				found_depth = max_term_depth+1;
+				break;
+			}
 		}
 	}
 	for (uint64_t i = 0;i<arg_count;++i){
@@ -1585,7 +1593,6 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		printf(" -> ");
 		show_term_unambiguous(results[i]);
 		printf("\n");
-		printf("\n");
 	}
 	printf("f: \033[8m");
 	show_term(fun);
@@ -1593,6 +1600,7 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 	printf("f: \033[8m");
 	show_term_unambiguous(fun);
 	printf("\033[0m\n");
+	printf("\n");
 }
 
 uint8_t
@@ -1631,6 +1639,29 @@ compare_terms(pool* const mem, expr* const a, expr* const b){
 	return result;
 }
 
+uint8_t
+term_contained(pool* const mem, expr* const a, expr* const b){
+	switch (b->tag){
+	case BIND_EXPR:
+		if (compare_terms(mem, a, b->data.bind.expression) == 1){
+			return 1;
+		}
+		return term_contained(mem, a, b->data.bind.expression);
+	case APPL_EXPR:
+		if (compare_terms(mem, a, b->data.appl.left) == 1){
+			return 1;
+		}
+		if (compare_terms(mem, a, b->data.appl.right) == 1){
+			return 1;
+		}
+		return term_contained(mem, a, b->data.appl.left)
+			 | term_contained(mem, a, b->data.appl.right);
+	case NAME_EXPR:
+		return compare_terms(mem, a, b);
+	}
+	return 0;
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
@@ -1652,6 +1683,8 @@ main(int argc, char** argv){
 		show_term(result);
 	 	printf("\n");
 	}
-	generate_combinator_strike_puzzle(&inter);
+	for (uint64_t i = 0;i<5;++i){
+		generate_combinator_strike_puzzle(&inter);
+	}
 	return 0;
 }
