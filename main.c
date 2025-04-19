@@ -1620,7 +1620,10 @@ compare_terms_helper(expr* const a, expr* const b, string_map* const map){
 	case NAME_EXPR:
 		string* isb = string_map_access(map, a->data.name.str);
 		if (isb == NULL){
-			return 0;
+			if (a->data.name.len != b->data.name.len){
+				return 0;
+			}
+			return !strncmp(a->data.name.str, b->data.name.str, a->data.name.len);
 		}
 		if (isb->len != b->data.name.len){
 			return 0;
@@ -1643,6 +1646,9 @@ uint8_t
 term_contained(pool* const mem, expr* const a, expr* const b){
 	switch (b->tag){
 	case BIND_EXPR:
+		if (compare_terms(mem, a, b) == 1){
+			return 1;
+		}
 		if (compare_terms(mem, a, b->data.bind.expression) == 1){
 			return 1;
 		}
