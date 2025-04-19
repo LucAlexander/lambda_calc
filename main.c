@@ -158,7 +158,7 @@ show_term_helper(expr* const ex, expr* const left){
 		show_term(ex->data.bind.expression);
 		return;
 	case APPL_EXPR:
-		if (left == NULL && ex->data.appl.right->tag != BIND_EXPR){
+		if (left == NULL && ex->data.appl.right->tag == NAME_EXPR){
 			show_term(ex->data.appl.left);
 			printf(" ");
 			show_term_helper(ex->data.appl.right, ex->data.appl.left);
