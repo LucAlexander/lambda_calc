@@ -34,6 +34,9 @@ next_string(interpreter* const inter){
 		pool_request(inter->mem, 1);
 		inter->next.str[inter->next.len] = '\0';
 	}
+	if (expr_map_access(&inter->universe, new.str) != NULL){
+		return next_string(inter);
+	}
 	return new;
 }
 
@@ -1522,56 +1525,52 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 	add_to_universe(inter, "0", "FALSE");
 	add_to_universe(inter, "1", "\\x.\\y.x y");
 	add_to_universe(inter, "2", "\\x.\\y.x (x y)");
-	add_to_universe(inter, "compose", "\\x.\\y.\\z.x (y z)");
 	add_to_universe(inter, "s", "S");
+	add_to_universe(inter, "compose", "\\x.\\y.\\z.x (y z)");
 	add_to_universe(inter, "if", "\\x.\\y.\\z.x y z");
 	char* items[] = {
 		"flip", "const", "cons", "id", "and", "or", "not", "true", "false",
-		"succ", "add", "mul", "exp", "0", "1", "2", "compose", "s", "if"
+		"succ", "add", "mul", "exp", "0", "1", "2", "s", "compose", "if"
 	};
-	uint64_t count = 19;
+	uint64_t count = 18;
 	uint64_t min_term_depth = 2;
-	uint64_t max_term_depth = 3;
-	uint64_t found_depth = 4;
+	uint64_t max_term_depth = 4;
+	uint64_t found_depth = max_term_depth+1;
 	uint64_t other_found_depth = 0;
 	while (found_depth > max_term_depth || other_found_depth < min_term_depth){
 		found_depth = 0;
-		other_found_depth = 2;
+		other_found_depth = min_term_depth+1;
 		expr* f = generate_combinator_term(inter, items, count, 5, 3);
 		rebase_term(inter, f);
 		printf("Function: ");
 		show_term(f);
+		printf("                         ");
+		show_term_unambiguous(f);
 		printf("\n");
 		for (uint64_t i = 0;i<3;++i){
 			expr* copy = deep_copy(inter, NULL, f);
-			printf("copy: ");
-			show_term(copy);
-			printf("\n");
-			expr* arg = generate_combinator_term(inter, items, count, 3, 1);
+			expr* arg = generate_combinator_term(inter, items, count, max_term_depth, min_term_depth);
 			printf("Arg %lu: ", i);
 			show_term(arg);
 			printf(" -> ");
-			expr applied = {
-				.tag = APPL_EXPR,
-				.data.appl.left=copy,
-				.data.appl.right=arg
-			};
+			expr* applied = pool_request(inter->mem, sizeof(expr));
+			applied->tag = APPL_EXPR;
+			applied->data.appl.left=copy;
+			applied->data.appl.right=arg;
 			int8_t reductions = 8;
-			while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
-			rebase_term(inter, &applied);
-			show_term(&applied);
+			while (reduce_step(inter, applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+			rebase_term(inter, applied);
+			show_term(applied);
 			printf("                         ");
-			show_term_unambiguous(&applied);
+			show_term_unambiguous(applied);
 			printf("\n");
-			uint8_t depth = term_depth(&applied);
-			printf("(after %u reductions at depth %u)\n", 8-reductions, depth);
+			uint8_t depth = term_depth(applied);
 			if (depth > found_depth){
 				found_depth = depth;
 			}
 			if (depth < other_found_depth){
 				other_found_depth = depth;
 			}
-			printf("\n");
 		}
 		printf("\n");
 	}
