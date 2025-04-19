@@ -101,6 +101,12 @@ deep_copy_replace(interpreter* const inter, string_map* map, expr* const target,
 
 expr*
 apply_term(interpreter* const inter, expr* const left, expr* const right){
+	if (left->tag == NAME_EXPR){
+		expr* saved = expr_map_access(&inter->universe, left->data.name.str);
+		if (saved != NULL){
+			return apply_term(inter, saved, right);
+		}
+	}
 	if (left->tag != BIND_EXPR){
 		return NULL;
 	}
@@ -130,10 +136,10 @@ reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth)
 					*expression = *standin;
 					return 1;
 				}
-				if (expression->data.appl.left->tag != BIND_EXPR){
+				expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
+				if (new == NULL){
 					return 0;
 				}
-				expr* new = apply_term(inter, expression->data.appl.left, expression->data.appl.right);
 				*expression = *new;
 			}
 		}
@@ -1408,11 +1414,15 @@ parse_term(char* cstr, interpreter* const inter){
 		.token_index = 0
 	};
 	lex_cstr(&parse, cstr);
+#ifdef DEBUG
 	show_tokens(&parse);
+#endif
 	expr* term = parse_term_recursive(&parse, 0);
+#ifdef DEBUG
 	printf("Parsed term: ");
 	show_term(term);
 	printf("\n");
+#endif
 	pool_dealloc(&tokens);
 	return term;
 }
@@ -1432,35 +1442,8 @@ add_to_universe(interpreter* const inter, char* name, char* eval){
 	expr_map_insert(&inter->universe, term_name, term);
 }
 
-void
-generate_combinator_strike_puzzle(interpreter* const inter){
-	reset_universe(inter);
-	add_to_universe(inter, "flip", "T");
-	add_to_universe(inter, "const", "K");
-	add_to_universe(inter, "cons", "CONS");
-	add_to_universe(inter, "id", "I");
-	add_to_universe(inter, "and", "AND");
-	add_to_universe(inter, "or", "OR");
-	add_to_universe(inter, "not", "NOT");
-	add_to_universe(inter, "true", "TRUE");
-	add_to_universe(inter, "false", "FALSE");
-	add_to_universe(inter, "succ", "SUCC");
-	add_to_universe(inter, "add", "ADD");
-	add_to_universe(inter, "mul", "MUL");
-	add_to_universe(inter, "exp", "EXP");
-	add_to_universe(inter, "0", "FALSE");
-	add_to_universe(inter, "1", "\\x.\\y.x y");
-	add_to_universe(inter, "2", "\\x.\\y.x (x y)");
-	add_to_universe(inter, "compose", "\\x.\\y.\\z.x (y z)");
-	add_to_universe(inter, "s", "S");
-	add_to_universe(inter, "if", "\\x.\\y.\\z.x y z");
-	char* items[] = {
-		"flip", "const", "cons", "id", "and", "or", "not", "true", "false",
-		"succ", "add", "mul", "exp", "0", "1", "2", "compose", "s", "if"
-	};
-	uint64_t count = 19;
-	uint64_t max_width = 5;
-	uint64_t min_width = 3;
+expr*
+generate_combinator_term(interpreter* const inter, char** items, uint64_t count, uint64_t max_width, uint64_t min_width){
 	uint64_t width = (rand() % (max_width - min_width)) + min_width;
 	expr* f = pool_request(inter->mem, sizeof(expr));
 	expr* outer = f;
@@ -1493,8 +1476,58 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		}
 		width -= 1;
 	}
+	return f;
+}
+
+void
+generate_combinator_strike_puzzle(interpreter* const inter){
+	reset_universe(inter);
+	add_to_universe(inter, "flip", "T");
+	add_to_universe(inter, "const", "K");
+	add_to_universe(inter, "cons", "CONS");
+	add_to_universe(inter, "id", "I");
+	add_to_universe(inter, "and", "AND");
+	add_to_universe(inter, "or", "OR");
+	add_to_universe(inter, "not", "NOT");
+	add_to_universe(inter, "true", "TRUE");
+	add_to_universe(inter, "false", "FALSE");
+	add_to_universe(inter, "succ", "SUCC");
+	add_to_universe(inter, "add", "ADD");
+	add_to_universe(inter, "mul", "MUL");
+	add_to_universe(inter, "exp", "EXP");
+	add_to_universe(inter, "0", "FALSE");
+	add_to_universe(inter, "1", "\\x.\\y.x y");
+	add_to_universe(inter, "2", "\\x.\\y.x (x y)");
+	add_to_universe(inter, "compose", "\\x.\\y.\\z.x (y z)");
+	add_to_universe(inter, "s", "S");
+	add_to_universe(inter, "if", "\\x.\\y.\\z.x y z");
+	char* items[] = {
+		"flip", "const", "cons", "id", "and", "or", "not", "true", "false",
+		"succ", "add", "mul", "exp", "0", "1", "2", "compose", "s", "if"
+	};
+	uint64_t count = 19;
+	uint8_t reductions = 8;
+	expr* f = generate_combinator_term(inter, items, count, 5, 3);
 	rebase_term(inter, f);
+	printf("Function: ");
 	show_term(f);
+	printf("\n");
+	for (uint64_t i = 0;i<3;++i){
+		expr* copy = deep_copy(inter, NULL, f);
+		expr* arg = generate_combinator_term(inter, items, count, 3, 1);
+		printf("Arg %lu: ", i);
+		show_term(arg);
+		printf(" -> ");
+		expr applied = {
+			.tag = APPL_EXPR,
+			.data.appl.left=copy,
+			.data.appl.right=arg
+		};
+		while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+		rebase_term(inter, &applied);
+		show_term(&applied);
+		printf("\n");
+	}
 }
 
 int
@@ -1502,7 +1535,7 @@ main(int argc, char** argv){
 	srand(time(NULL));
 	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
 	interpreter inter = interpreter_init(&mem);
-	{// example functionality
+	if (0){// example functionality
 		add_to_universe(&inter, "flip", "\\x.\\y.y x");
 		add_to_universe(&inter, "const", "\\x.\\y.x");
 		uint64_t len = strlen("(\\x.\\y.const flip x y) TRUE FALSE");
@@ -1518,5 +1551,6 @@ main(int argc, char** argv){
 		show_term(result);
 	 	printf("\n");
 	}
+	generate_combinator_strike_puzzle(&inter);
 	return 0;
 }
