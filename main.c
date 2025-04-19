@@ -151,24 +151,27 @@ reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth)
 }
 
 void
-show_term_helper(expr* const ex, expr* const left){
+show_term_helper(expr* const ex, uint8_t special){
 	switch (ex->tag){
 	case BIND_EXPR:
 		printf("\\%s.", ex->data.bind.name.str);
 		show_term(ex->data.bind.expression);
 		return;
 	case APPL_EXPR:
-		if (left == NULL && ex->data.appl.right->tag == NAME_EXPR){
-			show_term(ex->data.appl.left);
-			printf(" ");
-			show_term_helper(ex->data.appl.right, ex->data.appl.left);
-			return;
+		if (special == 0){
+			printf("(");
 		}
-		printf("(");
-		show_term(ex->data.appl.left);
+		if (ex->data.appl.left->tag == APPL_EXPR){
+			show_term_helper(ex->data.appl.left, 1);
+		}
+		else{
+			show_term(ex->data.appl.left);
+		}
 		printf(" ");
-		show_term_helper(ex->data.appl.right, ex->data.appl.left);
-		printf(")");
+		show_term(ex->data.appl.right);
+		if (special == 0){
+			printf(")");
+		}
 		return;
 	case NAME_EXPR:
 		printf("%s", ex->data.name.str);
@@ -178,7 +181,7 @@ show_term_helper(expr* const ex, expr* const left){
 
 void
 show_term(expr* const ex){
-	show_term_helper(ex, NULL);
+	show_term_helper(ex, 0);
 }
 
 expr*
