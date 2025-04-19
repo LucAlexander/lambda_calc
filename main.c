@@ -611,7 +611,7 @@ term_depth(expr* const expression){
 		return 1 + term_depth(expression->data.bind.expression);
 	case APPL_EXPR:
 		uint8_t a = term_depth(expression->data.appl.left);
-		uint8_t b = term_depth(expression->data.appl.left);
+		uint8_t b = term_depth(expression->data.appl.right);
 		if (a>b){
 			return a+1;
 		}
@@ -1530,11 +1530,13 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		"succ", "add", "mul", "exp", "0", "1", "2", "compose", "s", "if"
 	};
 	uint64_t count = 19;
-	uint8_t reductions = 8;
+	uint64_t min_term_depth = 2;
 	uint64_t max_term_depth = 3;
 	uint64_t found_depth = 4;
-	while (found_depth > max_term_depth){
+	uint64_t other_found_depth = 0;
+	while (found_depth > max_term_depth || other_found_depth < min_term_depth){
 		found_depth = 0;
+		other_found_depth = 2;
 		expr* f = generate_combinator_term(inter, items, count, 5, 3);
 		rebase_term(inter, f);
 		printf("Function: ");
@@ -1542,6 +1544,9 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 		printf("\n");
 		for (uint64_t i = 0;i<3;++i){
 			expr* copy = deep_copy(inter, NULL, f);
+			printf("copy: ");
+			show_term(copy);
+			printf("\n");
 			expr* arg = generate_combinator_term(inter, items, count, 3, 1);
 			printf("Arg %lu: ", i);
 			show_term(arg);
@@ -1551,16 +1556,22 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 				.data.appl.left=copy,
 				.data.appl.right=arg
 			};
+			int8_t reductions = 8;
 			while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
 			rebase_term(inter, &applied);
 			show_term(&applied);
-			printf("\n");
+			printf("                         ");
 			show_term_unambiguous(&applied);
 			printf("\n");
 			uint8_t depth = term_depth(&applied);
+			printf("(after %u reductions at depth %u)\n", 8-reductions, depth);
 			if (depth > found_depth){
 				found_depth = depth;
 			}
+			if (depth < other_found_depth){
+				other_found_depth = depth;
+			}
+			printf("\n");
 		}
 		printf("\n");
 	}
