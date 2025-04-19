@@ -1507,25 +1507,35 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 	};
 	uint64_t count = 19;
 	uint8_t reductions = 8;
-	expr* f = generate_combinator_term(inter, items, count, 5, 3);
-	rebase_term(inter, f);
-	printf("Function: ");
-	show_term(f);
-	printf("\n");
-	for (uint64_t i = 0;i<3;++i){
-		expr* copy = deep_copy(inter, NULL, f);
-		expr* arg = generate_combinator_term(inter, items, count, 3, 1);
-		printf("Arg %lu: ", i);
-		show_term(arg);
-		printf(" -> ");
-		expr applied = {
-			.tag = APPL_EXPR,
-			.data.appl.left=copy,
-			.data.appl.right=arg
-		};
-		while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
-		rebase_term(inter, &applied);
-		show_term(&applied);
+	uint64_t max_term_depth = 3;
+	uint64_t found_depth = 4;
+	while (found_depth > max_term_depth){
+		found_depth = 0;
+		expr* f = generate_combinator_term(inter, items, count, 5, 3);
+		rebase_term(inter, f);
+		printf("Function: ");
+		show_term(f);
+		printf("\n");
+		for (uint64_t i = 0;i<3;++i){
+			expr* copy = deep_copy(inter, NULL, f);
+			expr* arg = generate_combinator_term(inter, items, count, 3, 1);
+			printf("Arg %lu: ", i);
+			show_term(arg);
+			printf(" -> ");
+			expr applied = {
+				.tag = APPL_EXPR,
+				.data.appl.left=copy,
+				.data.appl.right=arg
+			};
+			while (reduce_step(inter, &applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+			rebase_term(inter, &applied);
+			show_term(&applied);
+			printf("\n");
+			uint8_t depth = term_depth(&applied);
+			if (depth > found_depth){
+				found_depth = depth;
+			}
+		}
 		printf("\n");
 	}
 }
