@@ -37,9 +37,12 @@ typedef struct expr {
 	} tag;
 } expr;
 
+MAP_DEF(expr)
+
 typedef struct interpreter {
 	pool* const mem;
 	string next;
+	expr_map universe;
 } interpreter;
 
 string next_string(interpreter* const inter);
@@ -143,5 +146,7 @@ expr* parse_body_term(parser* const parse, token* t, uint8_t paren);
 expr* parse_term_recursive(parser* const parse, uint8_t paren);
 void populate_combinators(TOKEN_map* map);
 expr* parse_term(char* cstr, interpreter* const inter);
+
+void add_to_universe(interpreter* const inter, char* name, char* eval);
 
 #endif

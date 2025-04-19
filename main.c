@@ -8,6 +8,7 @@
 
 MAP_IMPL(string)
 MAP_IMPL(TOKEN)
+MAP_IMPL(expr)
 
 string
 next_string(interpreter* const inter){
@@ -120,6 +121,15 @@ reduce_step(interpreter* const inter, expr* const expression, uint8_t max_depth)
 	case APPL_EXPR:
 		if (reduce_step(inter, expression->data.appl.left, max_depth-1) == 0){
 			if (reduce_step(inter, expression->data.appl.right, max_depth-1) == 0){
+				if (expression->data.appl.left->tag == NAME_EXPR){
+					expr* term = expr_map_access(&inter->universe, expression->data.appl.left->data.name.str);
+					if (term == NULL){
+						return 0;
+					}
+					expr* standin = apply_term(inter, term, expression->data.appl.right);
+					*expression = *standin;
+					return 1;
+				}
 				if (expression->data.appl.left->tag != BIND_EXPR){
 					return 0;
 				}
@@ -316,6 +326,7 @@ reset_universe(interpreter* const inter){
 	inter->next.str[0] = 'a';
 	inter->next.str[1] = '\0';
 	inter->next.len = 1;
+	expr_map_empty(&inter->universe);
 }
 
 expr*
@@ -332,7 +343,8 @@ interpreter
 interpreter_init(pool* const mem){
 	interpreter inter = {
 		.mem=mem,
-		.next.str = pool_request(mem, NAME_MAX)
+		.next.str = pool_request(mem, NAME_MAX),
+		.universe = expr_map_init(mem)
 	};
 	reset_universe(&inter);
 	return inter;
@@ -1246,13 +1258,20 @@ parse_body_term(parser* const parse, token* t, uint8_t paren){
 		char save = s[size];
 		s[size] = '\0';
 		string* name = string_map_access(parse->names, t->data.name.str);
-		if (name == NULL){
-			fprintf(stderr, "Unknown bound name %s\n", t->data.name.str);
-			return NULL;
+		if (name != NULL){
+			s[size] = save;
+			outer->data.name = *name;
+			return outer;
 		}
-		s[size] = save;
-		outer->data.name = *name;
-		return outer;
+		expr* found_term = expr_map_access(&parse->inter->universe, s);
+		if (found_term != NULL){
+			s[size] = save;
+			outer->data.name.str = s;
+			outer->data.name.len = size;
+			return outer;
+		}
+		fprintf(stderr, "Unknown bound name %s\n", t->data.name.str);
+		return NULL;
 	case NATURAL_TOKEN:
 		return build_nat(parse->inter, t->data.nat);
 	case S_TOKEN:
@@ -1384,7 +1403,21 @@ parse_term(char* cstr, interpreter* const inter){
 	show_term(term);
 	printf("\n");
 	pool_dealloc(&tokens);
-	return NULL;
+	return term;
+}
+
+void add_to_universe(interpreter* const inter, char* name, char* eval){
+	uint64_t len = strnlen(name, NAME_MAX);
+	uint64_t eval_len = strnlen(eval, NAME_MAX*4);
+	char* term_name = pool_request(inter->mem, len+1);
+	strncpy(term_name, name, len);
+	char* term_eval = pool_request(inter->mem, eval_len+1);
+	strncpy(term_eval, eval, eval_len);
+	expr* term = parse_term(term_eval, inter);
+	if (term == NULL){
+		return;
+	}
+	expr_map_insert(&inter->universe, term_name, term);
 }
 
 int
@@ -1392,9 +1425,19 @@ main(int argc, char** argv){
 	srand(time(NULL));
 	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
 	interpreter inter = interpreter_init(&mem);
-	uint64_t len = strlen("(\\x.\\y.CONS 4 (x y)) \\z.B");
+	add_to_universe(&inter, "flip", "\\x.\\y.y x");
+	add_to_universe(&inter, "const", "\\x.\\y.x");
+	uint64_t len = strlen("(\\x.\\y.const flip x y) TRUE FALSE");
 	char* term = pool_request(&mem, len+1);
-	strncpy(term, "(\\x.\\y.CONS 4 (x y)) \\z.B", len);
-	parse_term(term, &inter);
+	strncpy(term, "(\\x.\\y.const flip x y) TRUE FALSE", len);
+	expr* result = parse_term(term, &inter);
+	show_term(result);
+	printf("\n");
+	uint8_t reductions = 8;
+	while (reduce_step(&inter, result, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+	rebase_term(&inter, result);
+	printf("Final: ");
+	show_term(result);
+	printf("\n");
 	return 0;
 }
