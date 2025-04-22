@@ -171,3 +171,10 @@ void string_cat(pool* const mem, string* const a, string* const b){
 	a->str = new;
 	a->len = len;
 }
+
+int8_t string_compare(string* const a, string* const b){
+	if (a->len < b->len){
+		return strncmp(a->str, b->str, a->len);
+	}
+	return strncmp(a->str, b->str, b->len);
+}

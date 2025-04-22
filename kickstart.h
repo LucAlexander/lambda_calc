@@ -42,6 +42,7 @@ string string_copy(pool* const mem, string* const src);
 void string_set(pool* const mem, string* const str, char* src);
 void string_print(string* const str);
 void string_cat(pool* const mem, string* const a, string* const b);
+int8_t string_compare(string* const a, string* const b);
 
 #define MAP_BUCKET_COUNT 128
 void string_print(string* const key);
