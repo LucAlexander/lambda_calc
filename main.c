@@ -1506,7 +1506,7 @@ generate_combinator_term(interpreter* const inter, char** items, uint64_t count,
 	return f;
 }
 
-void
+term_puzzle
 generate_combinator_strike_puzzle(interpreter* const inter){
 	reset_universe(inter);
 	add_to_universe(inter, "flip", "T");
@@ -1537,20 +1537,17 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 	uint64_t max_term_depth = 4;
 	uint64_t found_depth = max_term_depth+1;
 	uint64_t other_found_depth = 0;
-	uint8_t arg_count = 3;
-	expr* fun;
-	expr* args[arg_count];
-	expr* results[arg_count];
+	term_puzzle p;
 	while (found_depth > max_term_depth || other_found_depth < min_term_depth){
 		found_depth = 0;
 		other_found_depth = min_term_depth+1;
 		expr* f = generate_combinator_term(inter, items, count, 5, 3);
-		fun = f;
+		p.fun = f;
 		rebase_term(inter, f);
-		for (uint64_t i = 0;i<arg_count;++i){
+		for (uint64_t i = 0;i<PUZZLE_ARG_COUNT;++i){
 			expr* copy = deep_copy(inter, NULL, f);
 			expr* arg = generate_combinator_term(inter, items, count, max_term_depth, min_term_depth);
-			args[i] = deep_copy(inter, NULL, arg);
+			p.args[i] = deep_copy(inter, NULL, arg);
 			expr* applied = pool_request(inter->mem, sizeof(expr));
 			applied->tag = APPL_EXPR;
 			applied->data.appl.left=copy;
@@ -1558,7 +1555,7 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 			int8_t reductions = 8;
 			while (reduce_step(inter, applied, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
 			rebase_term(inter, applied);
-			results[i] = applied;
+			p.results[i] = applied;
 			uint8_t depth = term_depth(applied);
 			if (depth > found_depth){
 				found_depth = depth;
@@ -1567,40 +1564,41 @@ generate_combinator_strike_puzzle(interpreter* const inter){
 				other_found_depth = depth;
 			}
 		}
-		if (compare_terms(inter->mem, args[0], args[1]) == 1){
+		if (compare_terms(inter->mem, p.args[0], p.args[1]) == 1){
 			found_depth = max_term_depth+1;
 			continue;
 		}
-		if (compare_terms(inter->mem, results[0], results[1]) == 1){
+		if (compare_terms(inter->mem, p.results[0], p.results[1]) == 1){
 			found_depth = max_term_depth+1;
 			continue;
 		}
-		for (uint64_t i = 0;i<arg_count;++i){
-			if (term_contained(inter->mem, args[i], results[i]) == 1){
+		for (uint64_t i = 0;i<PUZZLE_ARG_COUNT;++i){
+			if (term_contained(inter->mem, p.args[i], p.results[i]) == 1){
 				found_depth = max_term_depth+1;
 				break;
 			}
 		}
 	}
-	for (uint64_t i = 0;i<arg_count;++i){
+	for (uint64_t i = 0;i<PUZZLE_ARG_COUNT;++i){
 		printf("f ");
-		show_term(args[i]);
+		show_term(p.args[i]);
 		printf(" -> ");
-		show_term(results[i]);
+		show_term(p.results[i]);
 		printf("\n");
 		printf("f ");
-		show_term_unambiguous(args[i]);
+		show_term_unambiguous(p.args[i]);
 		printf(" -> ");
-		show_term_unambiguous(results[i]);
+		show_term_unambiguous(p.results[i]);
 		printf("\n");
 	}
 	printf("f: \033[8m");
-	show_term(fun);
+	show_term(p.fun);
 	printf("\033[0m\n");
 	printf("f: \033[8m");
-	show_term_unambiguous(fun);
+	show_term_unambiguous(p.fun);
 	printf("\033[0m\n");
 	printf("\n");
+	return p;
 }
 
 uint8_t

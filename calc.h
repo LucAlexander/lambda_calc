@@ -149,8 +149,16 @@ expr* parse_term_recursive(parser* const parse, uint8_t paren);
 void populate_combinators(TOKEN_map* map);
 expr* parse_term(char* cstr, interpreter* const inter);
 
+#define PUZZLE_ARG_COUNT 3
+
+typedef struct term_puzzle {
+	expr* fun;
+	expr* args[PUZZLE_ARG_COUNT];
+	expr* results[PUZZLE_ARG_COUNT];
+} term_puzzle;
+
 void add_to_universe(interpreter* const inter, char* name, char* eval);
-void generate_combinator_strike_puzzle(interpreter* const inter);
+term_puzzle generate_combinator_strike_puzzle(interpreter* const inter);
 uint8_t compare_terms_helper(expr* const a, expr* const b, string_map* const map);
 uint8_t compare_terms(pool* const mem, expr* const a, expr* const b);
 uint8_t term_contained(pool* const mem, expr* const a, expr* const b);
