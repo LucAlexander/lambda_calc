@@ -15,7 +15,7 @@ typedef struct string {
 	uint64_t len;
 } string;
 
-MAP_DEF(string)
+CSTR_MAP_DEF(string)
 
 typedef struct expr expr;
 typedef struct expr {
@@ -37,7 +37,7 @@ typedef struct expr {
 	} tag;
 } expr;
 
-MAP_DEF(expr)
+CSTR_MAP_DEF(expr)
 
 typedef struct interpreter {
 	pool* const mem;
@@ -119,7 +119,7 @@ typedef enum TOKEN {
 	CONS_TOKEN,
 } TOKEN;
 
-MAP_DEF(TOKEN)
+CSTR_MAP_DEF(TOKEN)
 
 typedef struct token {
 	union {
@@ -162,5 +162,8 @@ term_puzzle generate_combinator_strike_puzzle(interpreter* const inter);
 uint8_t compare_terms_helper(expr* const a, expr* const b, string_map* const map);
 uint8_t compare_terms(pool* const mem, expr* const a, expr* const b);
 uint8_t term_contained(pool* const mem, expr* const a, expr* const b);
+
+typedef struct type_constr {
+} type_constr;
 
 #endif

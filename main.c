@@ -6,9 +6,9 @@
 
 #include "calc.h"
 
-MAP_IMPL(string)
-MAP_IMPL(TOKEN)
-MAP_IMPL(expr)
+CSTR_MAP_IMPL(string)
+CSTR_MAP_IMPL(TOKEN)
+CSTR_MAP_IMPL(expr)
 
 string
 next_string(interpreter* const inter){

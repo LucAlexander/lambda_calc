@@ -18,7 +18,7 @@ typedef enum BUCKET_TAG {
 	BUCKET_FULL
 } BUCKET_TAG; 
 
-#define MAP_DEF(type)\
+#define CSTR_MAP_DEF(type)\
 struct type##_map_bucket;\
 typedef struct type##_map_bucket{\
 	BUCKET_TAG tag;\
@@ -41,7 +41,7 @@ type* type##_map_access(type##_map* const m, const char* const key);\
 type* type##_map_access_by_hash(type##_map* const m, uint32_t hash, const char* const key);\
 void type##_map_empty(type##_map* const m);
 
-#define MAP_IMPL(type)\
+#define CSTR_MAP_IMPL(type)\
 type##_map type##_map_init(pool* const mem){\
 	type##_map m = {\
 		.mem=mem\
