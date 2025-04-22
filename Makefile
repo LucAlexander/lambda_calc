@@ -1,2 +1,2 @@
 debug:
-	gcc -o inter main.c pool.c hashmap.h -g -Wall
+	gcc -o inter main.c kickstart.c hashmap.h -g -Wall

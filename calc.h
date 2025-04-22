@@ -2,6 +2,7 @@
 #define LAMBDA_CALCULUS_INTERPRETER_H
 
 #include <inttypes.h>
+#include "kickstart.h"
 #include "hashmap.h"
 
 #define POOL_SIZE 0x10000000
@@ -9,11 +10,6 @@
 #define TOKEN_MAX NAME_MAX
 #define APPLICATION_STACK_LIMIT 32
 #define MAX_REDUCTION_DEPTH 8
-
-typedef struct string {
-	char* str;
-	uint64_t len;
-} string;
 
 CSTR_MAP_DEF(string)
 

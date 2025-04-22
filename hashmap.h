@@ -1,7 +1,7 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-#include "pool.h"
+#include "kickstart.h"
 
 #define MAP_SIZE 128
 #define HASHMAP_ITERATE(i) for(uint8_t i = 0;i<MAP_SIZE;++i)
