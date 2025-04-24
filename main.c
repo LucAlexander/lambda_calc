@@ -1772,6 +1772,15 @@ term_matches_type(pool* const mem, grammar_map* const env, expr* const term, gra
 		type_string_map_insert(&checker.param_names, type->params[i], param_args[i]);
 	}
 	uint8_t res = term_matches_type_worker(mem, env, &checker, term, type);
+	if (res == 0){
+		for (uint64_t i = 0;i<type->alt_count;++i){
+			res = term_matches_type_worker(mem, env, &checker, term, &type->alts[i]);
+			if (res == 1){
+				break;
+			}
+		}
+		return res;
+	}
 	pool_load(mem);
 	return res;
 }
@@ -1804,6 +1813,32 @@ main(int argc, char** argv){
 	}
 	{
 		grammar_map universe = grammar_map_init(&mem);
+		grammar False = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = BIND_GRAM,
+			.data.bind.name = string_init(&mem, "x"),
+			.data.bind.typed = 0,
+			.data.bind.expression = NULL
+		};
+		grammar finner = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = BIND_GRAM,
+			.data.bind.name = string_init(&mem, "y"),
+			.data.bind.typed = 0,
+			.data.bind.expression = NULL
+		};
+		grammar fnamed = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = NAME_GRAM,
+			.data.name.name = string_init(&mem, "y")
+		};
+		finner.data.bind.expression = &fnamed;
+		False.data.bind.expression = &finner;
+		False.alts = NULL;
+		False.alt_count = 0;
 		grammar True = {
 			.params = NULL,
 			.param_count = 0,
@@ -1828,10 +1863,13 @@ main(int argc, char** argv){
 		};
 		inner.data.bind.expression = &named;
 		True.data.bind.expression = &inner;
+		True.alts = pool_request(&mem, sizeof(grammar));
+		True.alt_count = 1;
+		True.alts[0] = False;
 		add_to_universe(&inter, "const", "\\x.\\y.x");
-		uint64_t len = strlen("const");
+		uint64_t len = strlen("\\x.\\y.y");
 		char* term = pool_request(&mem, len+1);
-		strncpy(term, "const", len);
+		strncpy(term, "\\x.\\y.y", len);
 		expr* result = parse_term(term, &inter);
 		term_flatten(&inter, result);
 		show_term(result);

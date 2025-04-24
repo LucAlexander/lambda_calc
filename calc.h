@@ -197,6 +197,8 @@ typedef struct grammar {
 	} tag;
 	string* params;
 	uint64_t param_count;
+	grammar* alts;
+	uint64_t alt_count;
 } grammar;
 
 MAP_DECL(grammar)
