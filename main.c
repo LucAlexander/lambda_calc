@@ -10,6 +10,9 @@ CSTR_MAP_IMPL(string)
 CSTR_MAP_IMPL(TOKEN)
 CSTR_MAP_IMPL(expr)
 
+MAP_IMPL(grammar)
+MAP_IMPL(type_string)
+
 string
 next_string(interpreter* const inter){
 	string new = {
@@ -181,7 +184,7 @@ show_term_helper(expr* const ex, uint8_t special){
 		printf("\\%s.", ex->data.bind.name.str);
 		show_term(ex->data.bind.expression);
 		return;
-	case APPL_EXPR:
+case APPL_EXPR:
 		if (special == 0){
 			printf("(");
 		}
@@ -220,7 +223,7 @@ generate_term_internal(interpreter* const inter, string* const assoc, uint64_t c
 	expr* new = pool_request(inter->mem, sizeof(expr));
 	uint8_t max = 3;
 	if (current_index == 0){
-		max = 1;
+max = 1;
 	}
 	switch (rand() % max){
 	case 0:
@@ -229,7 +232,7 @@ generate_term_internal(interpreter* const inter, string* const assoc, uint64_t c
 		assoc[current_index] = new->data.bind.name;
 		new->data.bind.expression = generate_term_internal(inter, assoc, current_index+1, current_depth+1, max_depth);
 		return new;
-	case 1:
+case 1:
 		new->tag = APPL_EXPR;
 		new->data.appl.left = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
 		new->data.appl.right = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
@@ -1666,6 +1669,113 @@ term_contained(pool* const mem, expr* const a, expr* const b){
 	return 0;
 }
 
+void term_flatten(interpreter* const inter, expr* const term){
+	switch (term->tag){
+	case BIND_EXPR:
+		term_flatten(inter, term->data.bind.expression);
+		return;
+	case APPL_EXPR:
+		term_flatten(inter, term->data.appl.left);
+		term_flatten(inter, term->data.appl.right);
+		return;
+	case NAME_EXPR:
+		char* name = term->data.name.str;
+		uint64_t size = term->data.name.len;
+		char save = name[size];
+		name[size] = '\0';
+		expr* expression = expr_map_access(&inter->universe, term->data.name.str);
+		name[size] = save;
+		if (expression != NULL){
+			*term = *expression;
+		}
+		return;
+	}
+}
+
+uint8_t
+term_matches_type_worker(pool* const mem, grammar_map* const env, type_checker* const checker, expr* const term, grammar* const type){
+	switch (type->tag){
+	case BIND_GRAM:
+		if (term->tag != BIND_EXPR){
+			return 0;
+		}
+		type_string_map_insert(&checker->scope, term->data.bind.name, type->data.bind.name);
+		if (term->typed == 1 && type->data.bind.typed == 1){
+			type_string_map_insert(&checker->scope_types, term->type_name, type->data.bind.type);
+		}
+		return term_matches_type_worker(mem, env, checker, term->data.bind.expression, type->data.bind.expression);
+	case APPL_GRAM:
+		if (term->tag != APPL_EXPR){
+			return 0;
+		}
+		return term_matches_type_worker(mem, env, checker, term->data.appl.left, type->data.appl.left)
+			 & term_matches_type_worker(mem, env, checker, term->data.appl.right, type->data.appl.right);
+	case NAME_GRAM:
+		if (term->tag != NAME_EXPR){
+			return 0;
+		}
+		string* name = type_string_map_access(&checker->scope, term->data.name);
+		if (name == NULL){
+			return 0;
+		}
+		if (string_compare(name, &type->data.name.name) != 0){
+			return 0;
+		}
+		return 1;
+	case TYPE_GRAM:
+		if (term->tag == NAME_EXPR){
+			string* term_type = type_string_map_access(&checker->scope_types, term->data.name);
+			if (string_compare(term_type, &type->data.type.name) == 0){
+				return 1;
+			}
+		}
+		grammar* target = grammar_map_access(env, type->data.type.name);
+		if (target == NULL){
+			target = grammar_map_access(&checker->parameters, type->data.type.name);
+			if (target == NULL){
+				return 0;
+			}
+		}
+		string* applied_params = pool_request(mem, sizeof(string)*type->data.type.param_count);
+		for (uint64_t i = 0;i<type->data.type.param_count;++i){
+			string newname = type->params[i];
+			grammar* applied = grammar_map_access(env, newname);
+			if (applied == NULL){
+				string* param_name = type_string_map_access(&checker->param_names, type->params[i]);
+				if (param_name == NULL){
+					return 0;
+				}
+				newname = *param_name;
+			}
+			applied_params[i] = newname;
+		}
+		return term_matches_type(mem, env, term, target, applied_params, type->data.type.param_count);
+	}
+	return 0;
+}
+
+uint8_t
+term_matches_type(pool* const mem, grammar_map* const env, expr* const term, grammar* const type, string* param_args, uint64_t param_arg_count){
+	pool_save(mem);
+	type_checker checker = {
+		.parameters = grammar_map_init(mem),
+		.param_names = type_string_map_init(mem),
+		.scope = type_string_map_init(mem),
+		.scope_types = type_string_map_init(mem)
+	};
+	if (type->param_count < param_arg_count){
+		return 0;
+	}
+	for (uint64_t i = 0;i<param_arg_count;++i){
+		grammar* expansion = grammar_map_access(env, param_args[i]);
+		grammar_map_insert(&checker.parameters, type->params[i], *expansion);
+		type_string_map_insert(&checker.param_names, type->params[i], param_args[i]);
+	}
+	uint8_t res = term_matches_type_worker(mem, env, &checker, term, type);
+	pool_load(mem);
+	return res;
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
@@ -1687,8 +1797,47 @@ main(int argc, char** argv){
 		show_term(result);
 	 	printf("\n");
 	}
-	for (uint64_t i = 0;i<5;++i){
-		generate_combinator_strike_puzzle(&inter);
+	if (0){
+		for (uint64_t i = 0;i<5;++i){
+			generate_combinator_strike_puzzle(&inter);
+		}
+	}
+	{
+		grammar_map universe = grammar_map_init(&mem);
+		grammar True = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = BIND_GRAM,
+			.data.bind.name = string_init(&mem, "x"),
+			.data.bind.typed = 0,
+			.data.bind.expression = NULL
+		};
+		grammar inner = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = BIND_GRAM,
+			.data.bind.name = string_init(&mem, "y"),
+			.data.bind.typed = 0,
+			.data.bind.expression = NULL
+		};
+		grammar named = {
+			.params = NULL,
+			.param_count = 0,
+			.tag = NAME_GRAM,
+			.data.name.name = string_init(&mem, "x")
+		};
+		inner.data.bind.expression = &named;
+		True.data.bind.expression = &inner;
+		add_to_universe(&inter, "const", "\\x.\\y.x");
+		uint64_t len = strlen("const");
+		char* term = pool_request(&mem, len+1);
+		strncpy(term, "const", len);
+		expr* result = parse_term(term, &inter);
+		term_flatten(&inter, result);
+		show_term(result);
+		printf("\n");
+		uint8_t matches = term_matches_type(&mem, &universe, result, &True, NULL, 0);
+		printf("%u\n", matches);
 	}
 	return 0;
 }

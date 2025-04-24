@@ -15,6 +15,7 @@ CSTR_MAP_DEF(string)
 
 typedef struct expr expr;
 typedef struct expr {
+	string type_name;
 	union {
 		struct {
 			string name;
@@ -31,6 +32,7 @@ typedef struct expr {
 		APPL_EXPR,
 		NAME_EXPR
 	} tag;
+	uint8_t typed;
 } expr;
 
 CSTR_MAP_DEF(expr)
@@ -158,8 +160,55 @@ term_puzzle generate_combinator_strike_puzzle(interpreter* const inter);
 uint8_t compare_terms_helper(expr* const a, expr* const b, string_map* const map);
 uint8_t compare_terms(pool* const mem, expr* const a, expr* const b);
 uint8_t term_contained(pool* const mem, expr* const a, expr* const b);
+void term_flatten(interpreter* const inter, expr* const term);
 
-typedef struct type_constr {
-} type_constr;
+typedef string type_string;
+
+MAP_DECL(type_string)
+
+typedef struct grammar grammar;
+typedef struct grammar {
+	union {
+		struct {
+			string name;
+			string type;
+			grammar* expression;
+			uint8_t typed;
+		} bind;
+		struct {
+			grammar* left;
+			grammar* right;
+		} appl;
+		struct {
+			string name;
+			string type; // TODO unused?
+		} name;
+		struct {
+			string name;
+			string* params;
+			uint64_t param_count;
+		} type;
+	} data;
+	enum {
+		BIND_GRAM,
+		APPL_GRAM,
+		NAME_GRAM,
+		TYPE_GRAM
+	} tag;
+	string* params;
+	uint64_t param_count;
+} grammar;
+
+MAP_DECL(grammar)
+
+typedef struct type_checker {
+	grammar_map parameters;
+	type_string_map param_names;
+	type_string_map scope;
+	type_string_map scope_types;
+} type_checker;
+
+uint8_t term_matches_type_worker(pool* const mem, grammar_map* const env, type_checker* const checker, expr* const term, grammar* const type);
+uint8_t term_matches_type(pool* const mem, grammar_map* const env, expr* const term, grammar* const type, string* param_args, uint64_t param_arg_count);
 
 #endif
