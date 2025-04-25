@@ -135,6 +135,7 @@ typedef struct parser {
 	token* tokens;
 	uint64_t token_count;
 	uint64_t token_index;
+	uint8_t bind_check;
 } parser;
 
 uint8_t lex_natural(parser* const parse, char* cstr, uint64_t i, token* t);
@@ -199,18 +200,31 @@ typedef struct grammar {
 	uint64_t param_count;
 	grammar* alts;
 	uint64_t alt_count;
+	uint64_t alt_capacity;
 } grammar;
 
-MAP_DECL(grammar)
+typedef grammar* grammar_ptr;
+
+MAP_DECL(grammar_ptr)
+MAP_DECL(uint8_t)
 
 typedef struct type_checker {
-	grammar_map parameters;
+	grammar_ptr_map parameters;
 	type_string_map param_names;
 	type_string_map scope;
 	type_string_map scope_types;
 } type_checker;
 
-uint8_t term_matches_type_worker(pool* const mem, grammar_map* const env, type_checker* const checker, expr* const term, grammar* const type);
-uint8_t term_matches_type(pool* const mem, grammar_map* const env, expr* const term, grammar* const type, string* param_args, uint64_t param_arg_count);
+uint8_t term_matches_type_worker(pool* const mem, grammar_ptr_map* const env, type_checker* const checker, expr* const term, grammar* const type);
+uint8_t term_matches_type(pool* const mem, grammar_ptr_map* const env, expr* const term, grammar* const type, string* param_args, uint64_t param_arg_count);
+
+void create_bind_grammar(grammar* const type);
+void create_appl_grammar(grammar* const type);
+void create_name_grammar(grammar* const type);
+void create_type_grammar(grammar* const type);
+void type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* const param_map, grammar* const type, expr* const term);
+void type_add_alt(pool* const mem, grammar_ptr_map* const env, string* const name, grammar* const type, expr* const term);
+void show_grammar(grammar* const type);
+expr* parse_grammar(char* cstr, interpreter* const inter);
 
 #endif
