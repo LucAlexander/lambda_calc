@@ -1864,21 +1864,41 @@ create_type_grammar(grammar* const type){
 }
 
 void
-type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* const param_map, grammar* const type, expr* const term){
+type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* const param_map, grammar* const type, expr* const term, param_list* recursive_params){
 	switch (term->tag){
 	case BIND_EXPR:
 		create_bind_grammar(type);
 		type->data.bind.name = term->data.bind.name;
 		type->data.bind.typed = 0;
 		type->data.bind.expression = pool_request(mem, sizeof(grammar));
-		type_add_alt_worker(mem, env, param_map, type->data.bind.expression, term->data.bind.expression);
+		type_add_alt_worker(mem, env, param_map, type->data.bind.expression, term->data.bind.expression, NULL);
 		break;
 	case APPL_EXPR:
 		create_appl_grammar(type);
 		type->data.appl.left = pool_request(mem, sizeof(grammar));
 		type->data.appl.right = pool_request(mem, sizeof(grammar));
-		type_add_alt_worker(mem, env, param_map, type->data.appl.left, term->data.appl.left);
-		type_add_alt_worker(mem, env, param_map, type->data.appl.right, term->data.appl.right);
+		if (term->data.appl.right->tag == NAME_EXPR){
+			if (recursive_params == NULL){
+				recursive_params = pool_request(mem, sizeof(param_list));
+				recursive_params->name = term;
+				recursive_params->next = NULL;
+				recursive_params->len = 1;
+				recursive_params->used = 0;
+			}
+			else{
+				param_list* node = pool_request(mem, sizeof(param_list));
+				node->name = term;
+				node->next = recursive_params;
+				node->len = recursive_params->len + 1;
+				node->used = 0;
+				recursive_params = node;
+			}
+		}
+		type_add_alt_worker(mem, env, param_map, type->data.appl.left, term->data.appl.left, recursive_params);
+		if (recursive_params->used == 1){
+			break;
+		}
+		type_add_alt_worker(mem, env, param_map, type->data.appl.right, term->data.appl.right, NULL);
 		break;
 	case NAME_EXPR:
 		uint8_t* param = uint8_t_map_access(param_map, term->data.name);
@@ -1895,6 +1915,26 @@ type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* co
 		}
 		create_type_grammar(type);
 		type->data.type.name = term->data.name;
+		if (recursive_params != NULL){
+			uint64_t len = recursive_params->len;
+			expr* list_term = recursive_params->name;
+			type->data.type.params = pool_request(mem, len*sizeof(string));
+			uint64_t i = 0;
+			for (i = 0;i<len;++i){
+				param = uint8_t_map_access(param_map, list_term->data.name);
+				if (param == NULL){
+					grammar** env_type = grammar_ptr_map_access(env, list_term->data.name);
+					if (env_type == NULL){
+						break;
+					}
+				}
+				recursive_params->used = 1;
+				type->data.type.params[i] = list_term->data.name;
+				type->data.type.param_count += 1;
+				recursive_params = recursive_params->next;
+			}
+			//TODO prob back i
+		}
 		type->data.type.params = NULL; // TODO these two need to be filled with optional parameters
 		type->data.type.param_count = 0;
 		break;
@@ -1915,7 +1955,7 @@ type_add_alt(pool* const mem, grammar_ptr_map* const env, string* const name, gr
 		uint64_t param_count = type->param_count;
 		string* params = type->params;
 		grammar_ptr_map_insert(env, *name, type);
-		type_add_alt_worker(mem, env, &param_map, type, term);
+		type_add_alt_worker(mem, env, &param_map, type, term, NULL);
 		type->params = params;
 		type->param_count = param_count;
 		type->alts = newalts;
@@ -1929,7 +1969,7 @@ type_add_alt(pool* const mem, grammar_ptr_map* const env, string* const name, gr
 			}
 		}
 		create_type_grammar(&type->alts[type->alt_count]);
-		type_add_alt_worker(mem, env, &param_map, &type->alts[type->alt_count], term);
+		type_add_alt_worker(mem, env, &param_map, &type->alts[type->alt_count], term, NULL);
 		type->alt_count += 1;
 	}
 }
@@ -1952,7 +1992,7 @@ show_grammar(grammar* const type){
 		show_grammar(type->data.appl.left);
 		printf(" ");
 		show_grammar(type->data.appl.right);
-		printf(") ");
+		printf(")");
 		break;
 	case NAME_GRAM:
 		string_print(&type->data.name.name);
@@ -1964,7 +2004,7 @@ show_grammar(grammar* const type){
 			printf(" ");
 			string_print(&type->data.type.params[i]);
 		}
-		printf("] ");
+		printf("]");
 	}
 }
 

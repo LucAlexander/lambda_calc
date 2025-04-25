@@ -222,7 +222,16 @@ void create_bind_grammar(grammar* const type);
 void create_appl_grammar(grammar* const type);
 void create_name_grammar(grammar* const type);
 void create_type_grammar(grammar* const type);
-void type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* const param_map, grammar* const type, expr* const term);
+
+typedef struct param_list param_list;
+typedef struct param_list {
+	expr* name;
+	param_list* next;
+	uint64_t len;
+	uint8_t used;
+} param_list;
+
+void type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* const param_map, grammar* const type, expr* const term, param_list* recursive_params);
 void type_add_alt(pool* const mem, grammar_ptr_map* const env, string* const name, grammar* const type, expr* const term);
 void show_grammar(grammar* const type);
 expr* parse_grammar(char* cstr, interpreter* const inter);
