@@ -1880,14 +1880,14 @@ type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* co
 		if (term->data.appl.right->tag == NAME_EXPR){
 			if (recursive_params == NULL){
 				recursive_params = pool_request(mem, sizeof(param_list));
-				recursive_params->name = term;
+				recursive_params->name = term->data.appl.right;
 				recursive_params->next = NULL;
 				recursive_params->len = 1;
 				recursive_params->used = 0;
 			}
 			else{
 				param_list* node = pool_request(mem, sizeof(param_list));
-				node->name = term;
+				node->name = term->data.appl.right;
 				node->next = recursive_params;
 				node->len = recursive_params->len + 1;
 				node->used = 0;
@@ -1915,28 +1915,27 @@ type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_map* co
 		}
 		create_type_grammar(type);
 		type->data.type.name = term->data.name;
+		type->data.type.params = NULL;
+		type->data.type.param_count = 0;
 		if (recursive_params != NULL){
 			uint64_t len = recursive_params->len;
 			expr* list_term = recursive_params->name;
 			type->data.type.params = pool_request(mem, len*sizeof(string));
 			uint64_t i = 0;
 			for (i = 0;i<len;++i){
-				param = uint8_t_map_access(param_map, list_term->data.name);
+				uint8_t* param = uint8_t_map_access(param_map, term->data.name);
 				if (param == NULL){
 					grammar** env_type = grammar_ptr_map_access(env, list_term->data.name);
 					if (env_type == NULL){
 						break;
 					}
 				}
-				recursive_params->used = 1;
 				type->data.type.params[i] = list_term->data.name;
+				recursive_params->used = 1;
 				type->data.type.param_count += 1;
 				recursive_params = recursive_params->next;
 			}
-			//TODO prob back i
 		}
-		type->data.type.params = NULL; // TODO these two need to be filled with optional parameters
-		type->data.type.param_count = 0;
 		break;
 	}
 }
@@ -2078,7 +2077,6 @@ main(int argc, char** argv){
 		params[0] = string_init(&mem, "Bool");
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
-
 
 	}
 	return 0;
