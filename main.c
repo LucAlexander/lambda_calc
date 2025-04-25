@@ -14,6 +14,8 @@ MAP_IMPL(grammar_ptr)
 MAP_IMPL(type_string)
 MAP_IMPL(uint8_t)
 
+MAP_IMPL(simple_type)
+
 string
 next_string(interpreter* const inter){
 	string new = {
@@ -117,9 +119,27 @@ apply_term(interpreter* const inter, expr* const left, expr* const right){
 	if (left->tag != BIND_EXPR){
 		return NULL;
 	}
+	simple_type* applied_type;
+	if (left->typed == 1){
+		if (right->typed == 0){
+			return NULL;
+		}
+		if (left->simple == NULL){
+			return NULL;
+		}
+		if (left->simple->tag != FUNCTION_TYPE){
+			return NULL;
+		}
+		applied_type = pool_request(inter->mem, sizeof(simple_type));
+		deep_copy_simple_type(inter->mem, left->simple->data.function.right, applied_type);
+	}
 	char* target = left->data.bind.name.str;
 	string_map new_map = string_map_init(inter->mem);
 	expr* new = deep_copy_replace(inter, &new_map, left->data.bind.expression, target, right);
+	if (left->typed == 1){
+		new->typed = 1;
+		new->simple = applied_type;
+	}
 	return new;
 }
 
@@ -236,7 +256,7 @@ max = 1;
 case 1:
 		new->tag = APPL_EXPR;
 		new->data.appl.left = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
-		new->data.appl.right = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
+new->data.appl.right = generate_term_internal(inter, assoc, current_index, current_depth+1, max_depth);
 		return new;
 	case 2:
 		uint64_t index = rand() % current_index;
@@ -2007,6 +2027,104 @@ show_grammar(grammar* const type){
 	}
 }
 
+void
+parse_idle(idle* const world, pool* const mem, char* buffer, uint64_t len){
+	for (uint64_t i = 0;i<len;++i){
+		//TODO
+	}
+}
+
+void
+idle_repl(pool* const mem){
+	interpreter inter = interpreter_init(mem);
+	grammar_ptr_map env = grammar_ptr_map_init(mem);
+	idle world = {
+		.env=&env,
+		.inter=&inter
+	};
+	uint64_t len = 128;
+	char* buffer = pool_request(mem, len+1);
+	uint8_t running = 1;
+	while (running){
+		getline(&buffer, &len, stdin);
+		buffer[len] = '\0';
+		printf("%s\n", buffer);
+		parse_idle(&world, mem, buffer, len);
+	}
+}
+
+void
+show_simple_type(simple_type* const type){
+	switch (type->tag){
+	case NAT_TYPE:
+		printf("%lu", type->data.nat);
+		break;
+	case SUM_TYPE:
+		if (type->parameter_count > 0){
+			printf("(");
+		}
+		string_print(&type->data.sum.name);
+		for (uint64_t i = 0;i<type->parameter_count;++i){
+			printf(" ");
+			string_print(&type->parameters[i]);
+		}
+		if (type->parameter_count > 0){
+			printf(")");
+		}
+		break;
+	case PRODUCT_TYPE:
+		if (type->parameter_count > 0){
+			printf("(");
+		}
+		string_print(&type->data.product.name);
+		for (uint64_t i = 0;i<type->parameter_count;++i){
+			printf(" ");
+			string_print(&type->parameters[i]);
+		}
+		if (type->parameter_count > 0){
+			printf(")");
+		}
+		break;
+	case FUNCTION_TYPE:
+		printf("(");
+		show_simple_type(type->data.function.left);
+		printf(" -> ");
+		show_simple_type(type->data.function.right);
+		printf(")");
+		break;
+	case PARAMETER_TYPE:
+		string_print(&type->data.parameter);
+		break;
+	}
+}
+
+void
+deep_copy_simple_type(pool* const mem, simple_type* const target, simple_type* const new){
+	*new = *target;
+	switch (target->tag){
+	case SUM_TYPE:
+		new->data.sum.alts = pool_request(mem, sizeof(simple_type)*target->data.sum.alt_count);
+		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
+			deep_copy_simple_type(mem, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+		}
+		break;
+	case PRODUCT_TYPE:
+		new->data.product.members = pool_request(mem, sizeof(simple_type)*target->data.product.member_count);
+		for (uint64_t i = 0;i<target->data.product.member_count;++i){
+			deep_copy_simple_type(mem, &target->data.product.members[i], &new->data.product.members[i]);
+		}
+		break;
+	case FUNCTION_TYPE:
+		new->data.function.left = pool_request(mem, sizeof(simple_type));
+		new->data.function.right = pool_request(mem, sizeof(simple_type));
+		deep_copy_simple_type(mem, target->data.function.left, new->data.function.left);
+		deep_copy_simple_type(mem, target->data.function.right, new->data.function.right);
+		break;
+	default:
+		break;
+	}
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
@@ -2033,9 +2151,9 @@ main(int argc, char** argv){
 			generate_combinator_strike_puzzle(&inter);
 		}
 	}
-	{
+	if (0){
 		grammar_ptr_map env = grammar_ptr_map_init(&mem);
-		add_to_universe(&inter, "const", "\\x.\\y.x");
+		add_to_universe(&inter, "cons", "\\x.\\y.\\z.z x y");
 
 		uint64_t falslen = strlen("\\x.\\y.y");
 		char* falsterm = pool_request(&mem, falslen+1);
@@ -2052,10 +2170,13 @@ main(int argc, char** argv){
 		type_add_alt(&mem, &env, &bl, &Bool, falsresult);
 		type_add_alt(&mem, &env, &bl, &Bool, trueresult);
 
-		uint64_t len = strlen("\\x.x T T");
+		uint64_t len = strlen("cons T T");
 		char* term = pool_request(&mem, len+1);
-		strncpy(term, "\\x.x T T", len);
+		strncpy(term, "cons T T", len);
 		expr* result = parse_grammar(term, &inter);
+		uint8_t reductions = 128;
+		while (reduce_step(&inter, result, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+		term_flatten(&inter, result);
 		grammar Pair;
 		string pr = string_init(&mem, "Pair");
 		Pair.param_count = 1;
@@ -2079,5 +2200,7 @@ main(int argc, char** argv){
 		printf("%u\n", res);
 
 	}
+
+
 	return 0;
 }

@@ -13,9 +13,42 @@
 
 CSTR_MAP_DEF(string)
 
+typedef struct simple_type simple_type;
+typedef struct simple_type {
+	string* parameters;
+	uint64_t parameter_count;
+	union {
+		uint64_t nat;
+		struct {
+			string name;
+			simple_type* alts;
+			uint64_t alt_count;
+		} sum;
+		struct {
+			string name;
+			simple_type* members;
+			uint64_t member_count;
+		} product;
+		struct {
+			simple_type* left;
+			simple_type* right;
+		} function;
+		string parameter;
+	} data;
+	enum {
+		NAT_TYPE,
+		SUM_TYPE,
+		PRODUCT_TYPE,
+		FUNCTION_TYPE,
+		PARAMETER_TYPE
+	} tag;
+} simple_type;
+
+
 typedef struct expr expr;
 typedef struct expr {
 	string type_name;
+	simple_type* simple;
 	union {
 		struct {
 			string name;
@@ -37,10 +70,13 @@ typedef struct expr {
 
 CSTR_MAP_DEF(expr)
 
+MAP_DECL(simple_type)
+
 typedef struct interpreter {
 	pool* const mem;
 	string next;
 	expr_map universe;
+	simple_type_map types;
 } interpreter;
 
 string next_string(interpreter* const inter);
@@ -235,5 +271,16 @@ void type_add_alt_worker(pool* const mem, grammar_ptr_map* const env, uint8_t_ma
 void type_add_alt(pool* const mem, grammar_ptr_map* const env, string* const name, grammar* const type, expr* const term);
 void show_grammar(grammar* const type);
 expr* parse_grammar(char* cstr, interpreter* const inter);
+
+typedef struct idle {
+	grammar_ptr_map* env;
+	interpreter* inter;
+} idle;
+
+void parse_idle(idle* const world, pool* const mem, char* buffer, uint64_t len);
+void idle_repl(pool* const mem);
+
+void show_simple_type(simple_type* const type);
+void deep_copy_simple_type(pool* const mem, simple_type* const target, simple_type* const newtype);
 
 #endif
