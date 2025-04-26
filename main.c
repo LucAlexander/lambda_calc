@@ -2365,6 +2365,7 @@ lex_type(type_parser* const parse, char* cstr){
 			continue;
 		case TYPE_PAREN_CLOSE_TOKEN:
 		case TYPE_PAREN_OPEN_TOKEN:
+		case TYPE_ALT_TOKEN:
 			t->tag = c;
 			i += 1;
 			c = cstr[i];
@@ -2419,6 +2420,9 @@ show_type_tokens(type_parser* const parse){
 			break;
 		case TYPE_IMPL_TOKEN:
 			printf("[ IMPL : -> ] ");
+			break;
+		case TYPE_ALT_TOKEN:
+			printf("[ ALT : | ] ");
 			break;
 		case TYPE_PAREN_OPEN_TOKEN:
 			printf("[ OPEN : ( ] ");
@@ -2506,8 +2510,7 @@ main(int argc, char** argv){
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
 	}
-
-	parse_type("(x -> y -> z)->maybe t-> (a ->maybe a)", &inter);
+	parse_type("a | (x -> y -> z)->maybe t-> (a ->maybe a)", &inter);
 
 	return 0;
 }

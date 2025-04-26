@@ -296,6 +296,7 @@ simple_type** create_constructor_types(pool* const mem, simple_type* type, uint6
 typedef enum TYPE_TOKEN {
 	TYPE_IDENTIFIER_TOKEN,
 	TYPE_IMPL_TOKEN,
+	TYPE_ALT_TOKEN='|',
 	TYPE_PAREN_OPEN_TOKEN='(',
 	TYPE_PAREN_CLOSE_TOKEN=')'
 } TYPE_TOKEN;
