@@ -322,4 +322,10 @@ void lex_type(type_parser* const parse, char* str);
 simple_type* parse_type(char* cstr, interpreter* const inter);
 void show_type_tokens(type_parser* const parse);
 
+uint8_t parse_product_def(type_parser* const parse, simple_type* focus, uint8_t nested);
+simple_type* parse_type_def_recursive(type_parser* const parse);
+simple_type* parse_type_def(char* cstr, interpreter* const inter);
+
+simple_type* parse_type_use_recursive(type_parser* const parse, uint8_t nested);
+
 #endif

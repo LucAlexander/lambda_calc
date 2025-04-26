@@ -2428,7 +2428,7 @@ parse_product_def(type_parser* const parse, simple_type* focus, uint8_t nested){
 		if (t->tag == TYPE_ALT_TOKEN){
 			parse->token_index -= 1;
 			return 0;
-		}
+}
 		if (t->tag == TYPE_PAREN_OPEN_TOKEN){
 			if (parse_product_def(parse, &focus->data.product.members[focus->data.product.member_count], 1) != 0){
 				return 1;
@@ -2565,6 +2565,80 @@ parse_type_def(char* cstr, interpreter* const inter){
 }
 
 simple_type*
+parse_type_use_recursive(type_parser* const parse, uint8_t nested){
+	simple_type* focus = pool_request(parse->inter->mem, sizeof(simple_type));
+	simple_type* base = focus;
+	type_token* t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	uint64_t member_capacity = 2;
+	if (t->tag == TYPE_IDENTIFIER_TOKEN){
+		focus->tag = PRODUCT_TYPE;
+		focus->data.product.name = t->name;
+		focus->data.product.members = pool_request(parse->inter->mem, sizeof(simple_type)*member_capacity);
+		focus->data.product.member_count = 0;
+		focus = &base->data.product.members[0];
+	}
+	else if (t->tag == TYPE_PAREN_OPEN_TOKEN){
+		base->tag = FUNCTION_TYPE;
+		base->data.function.left = parse_type_use_recursive(parse, 1);
+		if (parse->token_index == parse->token_count){
+			return base->data.function.left;
+		}
+		parse->token_index += 1;
+		base->data.function.right = parse_type_use_recursive(parse, nested);
+		return base;
+	}
+	else{
+		fprintf(stderr, "Expected identifier or nested function for type use\n");
+		return NULL;
+	}
+	while (parse->token_index < parse->token_count){
+		t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+		if (base->data.product.member_count == member_capacity){
+			member_capacity *= 2;
+			simple_type* members = pool_request(parse->inter->mem, sizeof(simple_type)*member_capacity);
+			for (uint64_t i = 0;i<base->data.product.member_count;++i){
+				members[i] = base->data.product.members[i];
+			}
+			base->data.product.members = members;
+		}
+		if (t->tag == TYPE_IDENTIFIER_TOKEN){
+			focus->tag = PRODUCT_TYPE;
+			focus->data.product.name = t->name;
+			focus->data.product.members = NULL;
+			focus->data.product.member_count = 0;
+			base->data.product.member_count += 1;
+			focus = &base->data.product.members[base->data.product.member_count-1];
+		}
+		else if (t->tag == TYPE_IMPL_TOKEN){
+			simple_type* left = pool_request(parse->inter->mem, sizeof(simple_type));
+			*left = *base;
+			base->tag = FUNCTION_TYPE;
+			base->data.function.left = left;
+			base->data.function.right = parse_type_use_recursive(parse, nested);
+		}
+		else if (t->tag == TYPE_PAREN_OPEN_TOKEN){
+			*focus = *parse_type_use_recursive(parse, 1);
+			base->data.product.member_count += 1;
+			focus = &base->data.product.members[base->data.product.member_count-1];
+		}
+		else if (t->tag == TYPE_PAREN_CLOSE_TOKEN){
+			if (nested == 1){
+				return base;
+			}
+			fprintf(stderr, "Unexpected ) in non nested type use\n");
+			return NULL;
+		}
+		else {
+			fprintf(stderr, "Unexpected token in type use\n");
+			return NULL;
+		}
+	}
+	return base;
+}
+
+simple_type*
 parse_type_use(char* cstr, interpreter* const inter){
 	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
 	type_parser parse = {
@@ -2578,7 +2652,11 @@ parse_type_use(char* cstr, interpreter* const inter){
 	show_type_tokens(&parse);
 	printf("\n");
 #endif
-	//TODO parse
+	simple_type* result = parse_type_use_recursive(&parse, 0);
+#ifdef DEBUG
+	show_simple_type(result);
+	printf("\n");
+#endif
 	pool_dealloc(&tokens);
 	return NULL;
 }
@@ -2690,7 +2768,13 @@ main(int argc, char** argv){
 	parse_type_def("Maybe T = Just T | Nothing", &inter);
 	parse_type_def("Either L R = Left L | Right R", &inter);
 	parse_type_def("List T = Nil | Const T", &inter);
-	parse_type_def("Parser f = Parser (String -> f)", &inter);
+	parse_type_def("Parser F = Parser (String -> F)", &inter);
+	parse_type_def("Parser F = Parser String -> F", &inter);
+
+	parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
+	parse_type_use("(A -> B -> C -> D)", &inter);
+	parse_type_use("A -> B -> C -> D", &inter);
+	parse_type_use("A -> (B -> C) -> D", &inter);
 
 	return 0;
 }
