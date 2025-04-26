@@ -220,7 +220,7 @@ typedef struct grammar {
 		} appl;
 		struct {
 			string name;
-			string type; // TODO unused?
+			string type;
 		} name;
 		struct {
 			string name;
@@ -296,5 +296,6 @@ typedef struct parameter_diff {
 
 uint8_t simple_type_compare_parametric_differences(pool* const mem, simple_type* const left, simple_type* const right, parameter_diff* const node, parameter_string_map* params);
 void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const target, simple_type* const new, simple_type_map* const replacement_map);
+simple_type** create_constructor_types(pool* const mem, simple_type* type, uint64_t* len);
 
 #endif

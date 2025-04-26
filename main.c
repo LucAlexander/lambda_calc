@@ -2329,6 +2329,46 @@ void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const 
 	}
 }
 
+simple_type**
+create_constructor_types(pool* const mem, simple_type* type, uint64_t* len){
+	*len = 0;
+	simple_type* base;
+	simple_type* focus;
+	simple_type** buffer;
+	switch (type->tag){
+	case SUM_TYPE:
+		buffer = pool_request(mem, sizeof(simple_type)*type->data.sum.alt_count);
+		for (uint64_t k = 0;k<type->data.sum.alt_count;++k){
+			uint64_t size;
+			simple_type** intermediate = create_constructor_types(mem, &type->data.sum.alts[k], &size);
+			for (uint64_t i = 0;i<size;++i){
+				buffer[*len] = intermediate[i];
+				*len += 1;
+			}
+		}
+		return buffer;
+	case PRODUCT_TYPE:
+		base = pool_request(mem, sizeof(simple_type));
+		focus = base;
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
+			focus->tag = FUNCTION_TYPE;
+			focus->data.function.left = pool_request(mem, sizeof(simple_type));
+			focus->data.function.right = pool_request(mem, sizeof(simple_type));
+			simple_type* left = focus->data.function.left;
+			deep_copy_simple_type(mem, &type->data.product.members[i], left);
+			focus = focus->data.function.right;
+		}
+		deep_copy_simple_type(mem, focus, type);
+		buffer = pool_request(mem, sizeof(simple_type));
+		buffer[*len] = base;
+		*len += 1;
+		return buffer;
+	default:
+		return NULL;
+	}
+	return NULL;
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
