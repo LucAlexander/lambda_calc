@@ -5,6 +5,8 @@
 #include "kickstart.h"
 #include "hashmap.h"
 
+#define DEBUG
+
 #define POOL_SIZE 0x10000000
 #define NAME_MAX 16
 #define TOKEN_MAX NAME_MAX
@@ -297,6 +299,7 @@ typedef enum TYPE_TOKEN {
 	TYPE_IDENTIFIER_TOKEN,
 	TYPE_IMPL_TOKEN,
 	TYPE_ALT_TOKEN='|',
+	TYPE_EQ_TOKEN='=',
 	TYPE_PAREN_OPEN_TOKEN='(',
 	TYPE_PAREN_CLOSE_TOKEN=')'
 } TYPE_TOKEN;

@@ -297,7 +297,7 @@ generate_entropic_term_internal(interpreter* const inter, string* const assoc, u
 		uint64_t index = rand() % current_index;
 		expr* name = pool_request(inter->mem, sizeof(expr));
 		name->tag = NAME_EXPR;
-		name->data.name = assoc[index];
+name->data.name = assoc[index];
 		return name;
 	}
 	expr* new = pool_request(inter->mem, sizeof(expr));
@@ -2046,29 +2046,17 @@ void
 show_simple_type(simple_type* const type){
 	switch (type->tag){
 	case SUM_TYPE:
-		if (type->parameter_count > 0){
-			printf("(");
-		}
 		string_print(&type->data.sum.name);
-		for (uint64_t i = 0;i<type->parameter_count;++i){
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
 			printf(" ");
-			string_print(&type->parameters[i]);
-		}
-		if (type->parameter_count > 0){
-			printf(")");
+			show_simple_type(&type->data.product.members[i]);
 		}
 		break;
 	case PRODUCT_TYPE:
-		if (type->parameter_count > 0){
-			printf("(");
-		}
 		string_print(&type->data.product.name);
-		for (uint64_t i = 0;i<type->parameter_count;++i){
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
 			printf(" ");
-			string_print(&type->parameters[i]);
-		}
-		if (type->parameter_count > 0){
-			printf(")");
+			show_simple_type(&type->data.sum.alts[i]);
 		}
 		break;
 	case FUNCTION_TYPE:
@@ -2081,6 +2069,28 @@ show_simple_type(simple_type* const type){
 	case PARAMETER_TYPE:
 		string_print(&type->data.parameter);
 		break;
+	}
+}
+
+void
+show_simple_type_def(simple_type* const type){
+	switch (type->tag){
+	case SUM_TYPE:
+		string_print(&type->data.sum.name);
+		for (uint64_t i = 0;i<type->parameter_count;++i){
+			printf(" ");
+			string_print(&type->parameters[i]);
+		}
+		printf(" = ");
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
+			show_simple_type(&type->data.sum.alts[i]);
+			if (i+1 != type->data.sum.alt_count){
+				printf(" | ");
+			}
+		}
+		break;
+	default:
+		printf("Unexpected start to type def\n");
 	}
 }
 
@@ -2366,6 +2376,7 @@ lex_type(type_parser* const parse, char* cstr){
 		case TYPE_PAREN_CLOSE_TOKEN:
 		case TYPE_PAREN_OPEN_TOKEN:
 		case TYPE_ALT_TOKEN:
+		case TYPE_EQ_TOKEN:
 			t->tag = c;
 			i += 1;
 			c = cstr[i];
@@ -2391,8 +2402,147 @@ lex_type(type_parser* const parse, char* cstr){
 	}
 }
 
+uint8_t
+parse_product_def(type_parser* const parse, simple_type* focus, uint8_t nested){
+	type_token* t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	if (t->tag != TYPE_IDENTIFIER_TOKEN){
+		return 1;
+	}
+	focus->tag = PRODUCT_TYPE;
+	focus->data.product.name = t->name;
+	focus->data.product.member_count = 0;
+	uint64_t member_capacity = 2;
+	focus->data.product.members = pool_request(parse->inter->mem, sizeof(simple_type)*member_capacity);
+	while (parse->token_index < parse->token_count){
+		if (focus->data.product.member_count == member_capacity){
+			member_capacity *= 2;
+			simple_type* newmembers = pool_request(parse->inter->mem, sizeof(simple_type)*member_capacity);
+			for (uint64_t i = 0;i<focus->data.product.member_count;++i){
+				newmembers[i] = focus->data.product.members[i];
+			}
+			focus->data.product.members = newmembers;
+		}
+		t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+		if (t->tag == TYPE_ALT_TOKEN){
+			parse->token_index -= 1;
+			return 0;
+		}
+		if (t->tag == TYPE_PAREN_OPEN_TOKEN){
+			if (parse_product_def(parse, &focus->data.product.members[focus->data.product.member_count], 1) != 0){
+				return 1;
+			}
+			focus->data.product.member_count += 1;
+		}
+		else if (t->tag == TYPE_PAREN_CLOSE_TOKEN){
+			if (nested == 0){
+				fprintf(stderr, "Unexpected ) in unnested type definition expression\n");
+				return 1;
+			}
+			return 0;
+		}
+		else if (t->tag == TYPE_IDENTIFIER_TOKEN){
+			simple_type* member = &focus->data.product.members[focus->data.product.member_count];
+			member->tag = PRODUCT_TYPE;
+			member->data.product.name = t->name;
+			member->data.product.member_count = 0;
+			focus->data.product.member_count += 1;
+		}
+		else if (t->tag == TYPE_IMPL_TOKEN){
+			simple_type* left = pool_request(parse->inter->mem, sizeof(simple_type));
+			*left = *focus;
+			focus->tag = FUNCTION_TYPE;
+			focus->data.function.left = left;
+			focus->data.function.right = pool_request(parse->inter->mem, sizeof(simple_type));
+			if (parse_product_def(parse, focus->data.function.right, nested) != 0){
+				return 1;
+			}
+			return 0;
+		}
+		t = &parse->tokens[parse->token_index];
+		if (t->tag == TYPE_IMPL_TOKEN){
+			parse->token_index += 1;
+			simple_type* left = pool_request(parse->inter->mem, sizeof(simple_type));
+			*left = *focus;
+			focus->tag = FUNCTION_TYPE;
+			focus->data.function.left = left;
+			focus->data.function.right = pool_request(parse->inter->mem, sizeof(simple_type));
+			if (parse_product_def(parse, focus->data.function.right, nested) != 0){
+				return 1;
+			}
+			return 0;
+		}
+	}
+	return 0;
+}
+
 simple_type*
-parse_type(char* cstr, interpreter* const inter){
+parse_type_def_recursive(type_parser* const parse){
+	simple_type* focus = pool_request(parse->inter->mem, sizeof(simple_type));
+	simple_type* base = focus;
+	focus->tag = SUM_TYPE;
+	focus->data.sum.alt_count = 1;
+	type_token* t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	if (t->tag != TYPE_IDENTIFIER_TOKEN){
+		fprintf(stderr, "Expected name for outer type definition\n");
+		return NULL;
+	}
+	focus->data.sum.name = t->name;
+	uint64_t token_index_save = parse->token_index;
+	focus->parameter_count = 0;
+	t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	while (t->tag != TYPE_EQ_TOKEN && parse->token_index < parse->token_count){
+		focus->parameter_count += 1;
+		t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+	}
+	if (parse->token_index >= parse->token_count){
+		fprintf(stderr, "No type definition found for name and parameter set\n");
+		return NULL;
+	}
+	parse->token_index = token_index_save;
+	t = &parse->tokens[parse->token_index];
+	parse->token_index += 1;
+	focus->parameters = pool_request(parse->inter->mem, sizeof(string)*focus->parameter_count);
+	for (uint64_t i = 0;i<focus->parameter_count;++i){
+		focus->parameters[i] = t->name;
+		t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+	}
+	uint64_t alt_capacity = 2;
+	focus->data.sum.alts = pool_request(parse->inter->mem, sizeof(simple_type)*alt_capacity);
+	focus = &base->data.sum.alts[0];
+	while (parse->token_index < parse->token_count){
+		uint8_t err = parse_product_def(parse, focus, 0);
+		if (err != 0){
+			return NULL;
+		}
+		if (parse->token_index >= parse->token_count){
+			return base;
+		}
+		t = &parse->tokens[parse->token_index];
+		parse->token_index += 1;
+		if (t->tag == TYPE_ALT_TOKEN){
+			base->data.sum.alt_count += 1;
+			if (base->data.sum.alt_count == alt_capacity){
+				alt_capacity *= 2;
+				simple_type* members = pool_request(parse->inter->mem, sizeof(simple_type)*alt_capacity);
+				for (uint64_t i = 0;i<base->data.sum.alt_count;++i){
+					members[i] = base->data.sum.alts[i];
+				}
+				base->data.sum.alts = members;
+			}
+			focus = &base->data.sum.alts[base->data.sum.alt_count-1];
+		}
+	}
+	return base;
+}
+
+simple_type*
+parse_type_def(char* cstr, interpreter* const inter){
 	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
 	type_parser parse = {
 		.inter = inter,
@@ -2403,6 +2553,30 @@ parse_type(char* cstr, interpreter* const inter){
 	lex_type(&parse, cstr);
 #ifdef DEBUG
 	show_type_tokens(&parse);
+	printf("\n");
+#endif
+	simple_type* result = parse_type_def_recursive(&parse);
+#ifdef DEBUG
+	show_simple_type_def(result);
+	printf("\n");
+#endif
+	pool_dealloc(&tokens);
+	return result;
+}
+
+simple_type*
+parse_type_use(char* cstr, interpreter* const inter){
+	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
+	type_parser parse = {
+		.inter = inter,
+		.token_pool = &tokens,
+		.token_count = 0,
+		.token_index = 0
+	};
+	lex_type(&parse, cstr);
+#ifdef DEBUG
+	show_type_tokens(&parse);
+	printf("\n");
 #endif
 	//TODO parse
 	pool_dealloc(&tokens);
@@ -2420,6 +2594,9 @@ show_type_tokens(type_parser* const parse){
 			break;
 		case TYPE_IMPL_TOKEN:
 			printf("[ IMPL : -> ] ");
+			break;
+		case TYPE_EQ_TOKEN:
+			printf("[ EQ : = ] ");
 			break;
 		case TYPE_ALT_TOKEN:
 			printf("[ ALT : | ] ");
@@ -2510,7 +2687,10 @@ main(int argc, char** argv){
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
 	}
-	parse_type("a | (x -> y -> z)->maybe t-> (a ->maybe a)", &inter);
+	parse_type_def("Maybe T = Just T | Nothing", &inter);
+	parse_type_def("Either L R = Left L | Right R", &inter);
+	parse_type_def("List T = Nil | Const T", &inter);
+	parse_type_def("Parser f = Parser (String -> f)", &inter);
 
 	return 0;
 }
