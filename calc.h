@@ -277,9 +277,6 @@ typedef struct idle {
 	interpreter* inter;
 } idle;
 
-void parse_idle(idle* const world, pool* const mem, char* buffer, uint64_t len);
-void idle_repl(pool* const mem);
-
 void show_simple_type(simple_type* const type);
 void deep_copy_simple_type(pool* const mem, simple_type* const target, simple_type* const newtype);
 void deep_copy_simple_type_replace(pool* const mem, simple_type* const target, simple_type* const new, string replacee, simple_type* const replacement);
@@ -295,5 +292,30 @@ typedef struct parameter_diff {
 uint8_t simple_type_compare_parametric_differences(pool* const mem, simple_type* const left, simple_type* const right, parameter_diff* const node, parameter_string_map* params);
 void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const target, simple_type* const new, simple_type_map* const replacement_map);
 simple_type** create_constructor_types(pool* const mem, simple_type* type, uint64_t* len);
+
+typedef enum TYPE_TOKEN {
+	TYPE_IDENTIFIER_TOKEN,
+	TYPE_IMPL_TOKEN,
+	TYPE_PAREN_OPEN_TOKEN='(',
+	TYPE_PAREN_CLOSE_TOKEN=')'
+} TYPE_TOKEN;
+
+typedef struct type_token {
+	string name;
+	TYPE_TOKEN tag;
+} type_token;
+
+typedef struct type_parser {
+	interpreter* inter;
+	pool* token_pool;
+	type_token* tokens;
+	uint64_t token_count;
+	uint64_t token_index;
+} type_parser;
+
+uint8_t lex_type_identifier(type_parser* const parse, char* cstr, uint64_t i, type_token* t);
+void lex_type(type_parser* const parse, char* str);
+simple_type* parse_type(char* cstr, interpreter* const inter);
+void show_type_tokens(type_parser* const parse);
 
 #endif

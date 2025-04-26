@@ -1192,7 +1192,7 @@ lex_natural(parser* const parse, char* cstr, uint64_t i, token* t){
 uint8_t
 lex_identifier(parser* const parse, char* cstr, uint64_t i, token* t){
 	t->data.name.str = &cstr[i];
-	t->data.name.len = 0;
+t->data.name.len = 0;
 	t->tag = IDENTIFIER_TOKEN;
 	char c = cstr[i];
 	while (c != '\0'){
@@ -2043,32 +2043,6 @@ show_grammar(grammar* const type){
 }
 
 void
-parse_idle(idle* const world, pool* const mem, char* buffer, uint64_t len){
-	for (uint64_t i = 0;i<len;++i){
-		//TODO
-	}
-}
-
-void
-idle_repl(pool* const mem){
-	interpreter inter = interpreter_init(mem);
-	grammar_ptr_map env = grammar_ptr_map_init(mem);
-	idle world = {
-		.env=&env,
-		.inter=&inter
-	};
-	uint64_t len = 128;
-	char* buffer = pool_request(mem, len+1);
-	uint8_t running = 1;
-	while (running){
-		getline(&buffer, &len, stdin);
-		buffer[len] = '\0';
-		printf("%s\n", buffer);
-		parse_idle(&world, mem, buffer, len);
-	}
-}
-
-void
 show_simple_type(simple_type* const type){
 	switch (type->tag){
 	case SUM_TYPE:
@@ -2356,6 +2330,108 @@ create_constructor_types(pool* const mem, simple_type* type, uint64_t* len){
 	return NULL;
 }
 
+uint8_t
+lex_type_identifier(type_parser* const parse, char* cstr, uint64_t i, type_token* t){
+	t->name.str = &cstr[i];
+	t->name.len = 0;
+	t->tag = TYPE_IDENTIFIER_TOKEN;
+	char c = cstr[i];
+	while (c != '\0'){
+		if (!isalnum(c) && c != '_'){
+			break;
+		}
+		t->name.len += 1;
+		i += 1;
+		c = cstr[i];
+	}
+	return i;
+}
+
+void
+lex_type(type_parser* const parse, char* cstr){
+	uint64_t i = 0;
+	char c = cstr[i];
+	parse->tokens = pool_request(parse->token_pool, sizeof(type_token));
+	while (c != '\0'){
+		type_token* t = &parse->tokens[parse->token_count++];
+		switch (c){
+		case ' ':
+		case '\n':
+		case '\r':
+		case '\t':
+			i += 1;
+			c = cstr[i];
+			parse->token_count -= 1;
+			continue;
+		case TYPE_PAREN_CLOSE_TOKEN:
+		case TYPE_PAREN_OPEN_TOKEN:
+			t->tag = c;
+			i += 1;
+			c = cstr[i];
+			pool_request(parse->token_pool, sizeof(type_token));
+			continue;
+		}
+		if (c == '-'){
+			if (cstr[i+1] == '>'){
+				t->tag = TYPE_IMPL_TOKEN;
+				i += 2;
+				c = cstr[i];
+				pool_request(parse->token_pool, sizeof(type_token));
+				continue;
+			}
+		}
+		if (isalpha(c) || c == '_'){
+			i = lex_type_identifier(parse, cstr, i, t);
+			c = cstr[i];
+			pool_request(parse->token_pool, sizeof(type_token));
+			continue;
+		}
+		fprintf(stderr, "Unexpected character '%c'\n", c);
+	}
+}
+
+simple_type*
+parse_type(char* cstr, interpreter* const inter){
+	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
+	type_parser parse = {
+		.inter = inter,
+		.token_pool = &tokens,
+		.token_count = 0,
+		.token_index = 0
+	};
+	lex_type(&parse, cstr);
+#ifdef DEBUG
+	show_type_tokens(&parse);
+#endif
+	//TODO parse
+	pool_dealloc(&tokens);
+	return NULL;
+}
+
+void
+show_type_tokens(type_parser* const parse){
+	for (uint64_t i = 0;i<parse->token_count;++i){
+		switch (parse->tokens[i].tag){
+		case TYPE_IDENTIFIER_TOKEN:
+			printf("[ IDENTIFIER : ");
+			string_print(&parse->tokens[i].name);
+			printf(" ] ");
+			break;
+		case TYPE_IMPL_TOKEN:
+			printf("[ IMPL : -> ] ");
+			break;
+		case TYPE_PAREN_OPEN_TOKEN:
+			printf("[ OPEN : ( ] ");
+			break;
+		case TYPE_PAREN_CLOSE_TOKEN:
+			printf("[ CLOSE : ) ] ");
+			break;
+		default:
+			printf("[ UNKNOWN TYPE TOKEN VARIANT : ??? ] ");
+		}
+	}
+}
+
 int
 main(int argc, char** argv){
 	srand(time(NULL));
@@ -2430,6 +2506,8 @@ main(int argc, char** argv){
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
 	}
+
+	parse_type("(x -> y -> z)->maybe t-> (a ->maybe a)", &inter);
 
 	return 0;
 }
