@@ -21,7 +21,6 @@ typedef struct simple_type {
 	string* parameters;
 	uint64_t parameter_count;
 	union {
-		uint64_t nat;
 		struct {
 			string name;
 			simple_type* alts;
@@ -39,7 +38,6 @@ typedef struct simple_type {
 		string parameter;
 	} data;
 	enum {
-		NAT_TYPE,
 		SUM_TYPE,
 		PRODUCT_TYPE,
 		FUNCTION_TYPE,

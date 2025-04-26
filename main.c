@@ -2071,9 +2071,6 @@ idle_repl(pool* const mem){
 void
 show_simple_type(simple_type* const type){
 	switch (type->tag){
-	case NAT_TYPE:
-		printf("%lu", type->data.nat);
-		break;
 	case SUM_TYPE:
 		if (type->parameter_count > 0){
 			printf("(");
@@ -2191,11 +2188,6 @@ simple_type_compare(pool* const mem, simple_type* const left, simple_type* const
 		parameter_string_map_insert(params, left->parameters[i], right->parameters[i]);
 	}
 	switch (left->tag){
-	case NAT_TYPE:
-		if (left->data.nat != right->data.nat){
-			return 0;
-		}
-		return 1;
 	case SUM_TYPE:
 		if (left->data.sum.alt_count != right->data.sum.alt_count){
 			return 0;
@@ -2259,11 +2251,6 @@ simple_type_compare_parametric_differences(pool* const mem, simple_type* const l
 		parameter_string_map_insert(params, left->parameters[i], right->parameters[i]);
 	}
 	switch (left->tag){
-	case NAT_TYPE:
-		if (left->data.nat != right->data.nat){
-			return 0;
-		}
-		return 1;
 	case SUM_TYPE:
 		if (left->data.sum.alt_count != right->data.sum.alt_count){
 			return 0;
@@ -2442,9 +2429,7 @@ main(int argc, char** argv){
 		params[0] = string_init(&mem, "Bool");
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
-
 	}
-
 
 	return 0;
 }
