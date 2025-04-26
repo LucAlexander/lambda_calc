@@ -15,6 +15,7 @@ MAP_IMPL(type_string)
 MAP_IMPL(uint8_t)
 
 MAP_IMPL(simple_type)
+MAP_IMPL(parameter_string)
 
 string
 next_string(interpreter* const inter){
@@ -124,14 +125,28 @@ apply_term(interpreter* const inter, expr* const left, expr* const right){
 		if (right->typed == 0){
 			return NULL;
 		}
-		if (left->simple == NULL){
+		if (left->simple == NULL || right->simple == NULL){
 			return NULL;
 		}
 		if (left->simple->tag != FUNCTION_TYPE){
 			return NULL;
 		}
+		parameter_diff node = {
+			.next = NULL
+		};
+		if (simple_type_compare_parametric_differences(inter->mem, left->simple->data.function.left, right->simple, &node, NULL) == 0){
+			return NULL;
+		}
+		simple_type_map replacement_map = simple_type_map_init(inter->mem);
+		if (node.next != NULL){
+			parameter_diff* iter = node.next;
+			while (iter != NULL){
+				simple_type_map_insert(&replacement_map, iter->parameter, *iter->diff);
+				iter = iter->next;
+			}
+		}
 		applied_type = pool_request(inter->mem, sizeof(simple_type));
-		deep_copy_simple_type(inter->mem, left->simple->data.function.right, applied_type);
+		deep_copy_simple_type_replace_multiple(inter->mem, left->simple->data.function.right, applied_type, &replacement_map);
 	}
 	char* target = left->data.bind.name.str;
 	string_map new_map = string_map_init(inter->mem);
@@ -2119,6 +2134,195 @@ deep_copy_simple_type(pool* const mem, simple_type* const target, simple_type* c
 		new->data.function.right = pool_request(mem, sizeof(simple_type));
 		deep_copy_simple_type(mem, target->data.function.left, new->data.function.left);
 		deep_copy_simple_type(mem, target->data.function.right, new->data.function.right);
+		break;
+	default:
+		break;
+	}
+}
+
+void
+deep_copy_simple_type_replace(pool* const mem, simple_type* const target, simple_type* const new, string replacee, simple_type* const replacement){
+	*new = *target;
+	switch (target->tag){
+	case SUM_TYPE:
+		new->data.sum.alts = pool_request(mem, sizeof(simple_type)*target->data.sum.alt_count);
+		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
+			deep_copy_simple_type(mem, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+		}
+		break;
+	case PRODUCT_TYPE:
+		new->data.product.members = pool_request(mem, sizeof(simple_type)*target->data.product.member_count);
+		for (uint64_t i = 0;i<target->data.product.member_count;++i){
+			deep_copy_simple_type(mem, &target->data.product.members[i], &new->data.product.members[i]);
+		}
+		break;
+	case FUNCTION_TYPE:
+		new->data.function.left = pool_request(mem, sizeof(simple_type));
+		new->data.function.right = pool_request(mem, sizeof(simple_type));
+		deep_copy_simple_type(mem, target->data.function.left, new->data.function.left);
+		deep_copy_simple_type(mem, target->data.function.right, new->data.function.right);
+		break;
+	case PARAMETER_TYPE:
+		if (string_compare(&target->data.parameter, &replacee) == 0){
+			simple_type fill;
+			deep_copy_simple_type(mem, replacement, &fill);
+			*new = fill;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+uint8_t
+simple_type_compare(pool* const mem, simple_type* const left, simple_type* const right, parameter_string_map* params){
+	parameter_string_map p;
+	if (params == NULL){
+		p = parameter_string_map_init(mem);
+		params = &p;
+	}
+	if (left->tag != right->tag){
+		return 0;
+	}
+	if (left->parameter_count != right->parameter_count){
+		return 0;
+	}
+	for (uint64_t i = 0;i<left->parameter_count;++i){
+		parameter_string_map_insert(params, left->parameters[i], right->parameters[i]);
+	}
+	switch (left->tag){
+	case NAT_TYPE:
+		if (left->data.nat != right->data.nat){
+			return 0;
+		}
+		return 1;
+	case SUM_TYPE:
+		if (left->data.sum.alt_count != right->data.sum.alt_count){
+			return 0;
+		}
+		for (uint64_t i = 0;i<left->data.sum.alt_count;++i){
+			if (simple_type_compare(mem, &left->data.sum.alts[i], &right->data.sum.alts[i], params) == 0){
+				return 0;
+			}
+		}
+		return 1;
+	case PRODUCT_TYPE:
+		if (left->data.product.member_count != right->data.product.member_count){
+			return 0;
+		}
+		for (uint64_t i = 0;i<left->data.product.member_count;++i){
+			if (simple_type_compare(mem, &left->data.product.members[i], &right->data.product.members[i], params) == 0){
+				return 0;
+			}
+		}
+		return 1;
+	case FUNCTION_TYPE:
+		return simple_type_compare(mem, left->data.function.left, right->data.function.left, params)
+		     | simple_type_compare(mem, left->data.function.right, right->data.function.right, params);
+	case PARAMETER_TYPE:
+		parameter_string* converted = parameter_string_map_access(params, left->data.parameter);
+		if (string_compare(converted, &right->data.parameter) != 0){
+			return 0;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+uint8_t
+simple_type_compare_parametric_differences(pool* const mem, simple_type* const left, simple_type* const right, parameter_diff* const node, parameter_string_map* params){
+	parameter_string_map p;
+	if (params == NULL){
+		p = parameter_string_map_init(mem);
+		params = &p;
+	}
+	if (left->tag != right->tag){
+		if (left->tag == PARAMETER_TYPE){
+			parameter_string* converted = parameter_string_map_access(params, left->data.parameter);
+			if (converted != NULL){
+				return 0;
+			}
+			parameter_diff* next = node->next;
+			parameter_diff* newnode = pool_request(mem, sizeof(parameter_diff));
+			newnode->parameter = left->data.parameter;
+			newnode->diff = right;
+			newnode->next = next;
+			node->next = newnode;
+			return 1;
+		}
+		return 0;
+	}
+	if (left->parameter_count != right->parameter_count){
+		return 0;
+	}
+	for (uint64_t i = 0;i<left->parameter_count;++i){
+		parameter_string_map_insert(params, left->parameters[i], right->parameters[i]);
+	}
+	switch (left->tag){
+	case NAT_TYPE:
+		if (left->data.nat != right->data.nat){
+			return 0;
+		}
+		return 1;
+	case SUM_TYPE:
+		if (left->data.sum.alt_count != right->data.sum.alt_count){
+			return 0;
+		}
+		for (uint64_t i = 0;i<left->data.sum.alt_count;++i){
+			if (simple_type_compare_parametric_differences(mem, &left->data.sum.alts[i], &right->data.sum.alts[i], node, params) == 0){
+				return 0;
+			}
+		}
+		return 1;
+	case PRODUCT_TYPE:
+		if (left->data.product.member_count != right->data.product.member_count){
+			return 0;
+		}
+		for (uint64_t i = 0;i<left->data.product.member_count;++i){
+			if (simple_type_compare_parametric_differences(mem, &left->data.product.members[i], &right->data.product.members[i], node, params) == 0){
+				return 0;
+			}
+		}
+		return 1;
+	case FUNCTION_TYPE:
+		return simple_type_compare_parametric_differences(mem, left->data.function.left, right->data.function.left, node, params)
+		     | simple_type_compare_parametric_differences(mem, left->data.function.right, right->data.function.right, node, params);
+	case PARAMETER_TYPE:
+		parameter_string* converted = parameter_string_map_access(params, left->data.parameter);
+		if (string_compare(converted, &right->data.parameter) != 0){
+			return 0;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const target, simple_type* const new, simple_type_map* const replacement_map){
+	*new = *target;
+	switch (target->tag){
+	case SUM_TYPE:
+		new->data.sum.alts = pool_request(mem, sizeof(simple_type)*target->data.sum.alt_count);
+		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
+			deep_copy_simple_type(mem, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+		}
+		break;
+	case PRODUCT_TYPE:
+		new->data.product.members = pool_request(mem, sizeof(simple_type)*target->data.product.member_count);
+		for (uint64_t i = 0;i<target->data.product.member_count;++i){
+			deep_copy_simple_type(mem, &target->data.product.members[i], &new->data.product.members[i]);
+		}
+		break;
+	case FUNCTION_TYPE:
+		new->data.function.left = pool_request(mem, sizeof(simple_type));
+		new->data.function.right = pool_request(mem, sizeof(simple_type));
+		deep_copy_simple_type(mem, target->data.function.left, new->data.function.left);
+		deep_copy_simple_type(mem, target->data.function.right, new->data.function.right);
+		break;
+	case PARAMETER_TYPE:
+		simple_type* replacement = simple_type_map_access(replacement_map, target->data.parameter);
+		if (replacement != NULL){
+			deep_copy_simple_type(mem, replacement, new);
+		}
 		break;
 	default:
 		break;

@@ -13,6 +13,9 @@
 
 CSTR_MAP_DEF(string)
 
+typedef string parameter_string;
+MAP_DECL(parameter_string)
+
 typedef struct simple_type simple_type;
 typedef struct simple_type {
 	string* parameters;
@@ -43,7 +46,6 @@ typedef struct simple_type {
 		PARAMETER_TYPE
 	} tag;
 } simple_type;
-
 
 typedef struct expr expr;
 typedef struct expr {
@@ -282,5 +284,17 @@ void idle_repl(pool* const mem);
 
 void show_simple_type(simple_type* const type);
 void deep_copy_simple_type(pool* const mem, simple_type* const target, simple_type* const newtype);
+void deep_copy_simple_type_replace(pool* const mem, simple_type* const target, simple_type* const new, string replacee, simple_type* const replacement);
+uint8_t simple_type_compare(pool* const mem, simple_type* const left, simple_type* const right, parameter_string_map* params);
+
+typedef struct parameter_diff parameter_diff;
+typedef struct parameter_diff {
+	string parameter;
+	simple_type* diff;
+	parameter_diff* next;
+} parameter_diff;
+
+uint8_t simple_type_compare_parametric_differences(pool* const mem, simple_type* const left, simple_type* const right, parameter_diff* const node, parameter_string_map* params);
+void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const target, simple_type* const new, simple_type_map* const replacement_map);
 
 #endif
