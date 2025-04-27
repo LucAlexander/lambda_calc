@@ -2546,6 +2546,102 @@ parse_type_def_recursive(type_parser* const parse){
 	return base;
 }
 
+uint8_t simple_type_constructors_unique_worker(interpreter* const inter, simple_type* const type){
+	expr* cons;
+	char* name;
+	uint64_t size;
+	switch (type->tag){
+	case PRODUCT_TYPE:
+		size = type->data.product.name.len;
+		name = pool_request(inter->mem, size+1);
+		strncpy(name, type->data.product.name.str, size);
+		name[size] = '\0';
+		cons = expr_map_access(&inter->universe, name);
+		if (cons == NULL){
+			return 1;
+		}
+		fprintf(stderr, "Duplicate constructor defined ");
+		string_print(&type->data.product.name);
+		printf("\n");
+		return 0;
+	case SUM_TYPE:
+	case FUNCTION_TYPE:
+	case PARAMETER_TYPE:
+		break;
+	}
+	fprintf(stderr, "Unexpected top level alt\n");
+	return 1;
+}
+
+uint8_t simple_type_constructors_unique(interpreter* const inter, simple_type* const type){
+	switch (type->tag){
+	case SUM_TYPE:
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
+			if (simple_type_constructors_unique_worker(inter, &type->data.sum.alts[i]) == 0){
+				return 0;
+			}
+			create_constructor(inter, &type->data.sum.alts[i], type->data.sum.alt_count, i);
+		}
+		return 1;
+	default:
+		fprintf(stderr, "Unexpected first level type defintion type\n");
+		break;
+	}
+	return 1;
+}
+
+void
+create_constructor(interpreter* const inter, simple_type* const type, uint64_t alt_count, uint64_t alt_selector){
+	switch (type->tag){
+	case PRODUCT_TYPE:
+		expr* focus = pool_request(inter->mem, sizeof(expr));
+		expr* base = focus;
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
+			focus->tag = BIND_EXPR;
+			focus->data.bind.name = next_string(inter);
+			focus->data.bind.expression = pool_request(inter->mem, sizeof(expr));
+			focus->typed = 1;
+			focus->simple = pool_request(inter->mem, sizeof(simple_type));
+			deep_copy_simple_type(inter->mem, &type->data.product.members[i], focus->simple);
+			focus = focus->data.bind.expression;
+		}
+		string alt_name;
+		for (uint64_t i = 0;i<alt_count;++i){
+			focus->tag = BIND_EXPR;
+			focus->data.bind.name = next_string(inter);
+			focus->data.bind.expression = pool_request(inter->mem, sizeof(expr));
+			focus->typed = 0;
+			if (i == alt_selector){
+				alt_name = focus->data.bind.name;
+			}
+			focus = focus->data.bind.expression;
+		}
+		focus->tag = NAME_EXPR;
+		focus->data.name = alt_name;
+		expr* rebase = base;
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
+			expr* appl = pool_request(inter->mem, sizeof(expr));
+			appl->tag = APPL_EXPR;
+			expr temp = *focus;
+			*focus = *appl;
+			*appl = temp;
+			focus->data.appl.left = appl;
+			focus->data.appl.right = pool_request(inter->mem, sizeof(expr));
+			focus = focus->data.appl.right;
+			focus->tag = NAME_EXPR;
+			focus->data.name = rebase->data.bind.name;
+			rebase = rebase->data.bind.expression;
+		}
+		char* name = pool_request(inter->mem, type->data.product.name.len+1);
+		strncpy(name,type->data.product.name.str,type->data.product.name.len);
+		name[type->data.product.name.len] = '\0';
+		expr_map_insert(&inter->universe, name, base);
+		break;
+	default:
+		break;
+	}
+}
+
 simple_type*
 parse_type_def(char* cstr, interpreter* const inter){
 	pool tokens = pool_alloc(POOL_SIZE, POOL_STATIC);
@@ -2561,6 +2657,12 @@ parse_type_def(char* cstr, interpreter* const inter){
 	printf("\n");
 #endif
 	simple_type* result = parse_type_def_recursive(&parse);
+	if (simple_type_constructors_unique(inter, result) == 1){
+		simple_type_map_insert(&inter->types, result->data.sum.name, *result);
+	}
+	else {
+		return NULL;
+	}
 #ifdef DEBUG
 	show_simple_type_def(result);
 	printf("\n");
@@ -2738,7 +2840,6 @@ show_type_tokens(type_parser* const parse){
 	}
 }
 
-//TODO correctness needs to be ensure before this function
 void
 lower_type(interpreter* const inter, simple_type* const target, simple_type* const new){
 	*new = *target;
@@ -2857,9 +2958,7 @@ main(int argc, char** argv){
 	parse_type_def("Either L R = Left L | Right R", &inter);
 	parse_type_def("List T = Nil | Const T", &inter);
 	parse_type_def("Parser F = Parser (String -> F)", &inter);
-	parse_type_def("Parser F = Parser String -> F", &inter);
 
-	simple_type_map_insert(&inter.types, maybe->data.sum.name, *maybe);
 	simple_type* fmap = parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
 	simple_type low_type;
 	lower_type(&inter, fmap, &low_type);

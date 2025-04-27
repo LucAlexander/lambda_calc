@@ -330,5 +330,8 @@ void parameterize_simple_type_worker(interpreter* const inter, simple_type* cons
 void parameterize_simple_type(interpreter* const inter, simple_type* const type);
 void lower_type(interpreter* const inter, simple_type* const type, simple_type* const newtype);
 simple_type* parse_type_use_recursive(type_parser* const parse, uint8_t nested);
+uint8_t simple_type_constructors_unique_worker(interpreter* const inter, simple_type* type);
+uint8_t simple_type_constructors_unique(interpreter* const inter, simple_type* type);
+void create_constructor(interpreter* const inter, simple_type* const type, uint64_t alt_count, uint64_t alt_selector);
 
 #endif
