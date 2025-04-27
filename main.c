@@ -121,10 +121,7 @@ apply_term(interpreter* const inter, expr* const left, expr* const right){
 		return NULL;
 	}
 	simple_type* applied_type;
-	if (left->typed == 1){
-		if (right->typed == 0){
-			return NULL;
-		}
+	if (left->typed == 1 && right->typed == 1){
 		if (left->simple == NULL || right->simple == NULL){
 			return NULL;
 		}
@@ -2967,7 +2964,15 @@ main(int argc, char** argv){
 	lower_type(&inter, fmap, &low_type);
 	show_simple_type(&low_type);
 	printf("\n");
-	// what if the parameter is parametric? (J -> T J)
-	// when building a low type
+
+	uint64_t slen = strlen("Just 5");
+	char* sterm = pool_request(&mem, slen+1);
+	strncpy(sterm, "Just 2", slen);
+	expr* just = parse_term(sterm, &inter);
+	uint8_t reductions = 128;
+	while (reduce_step(&inter, just, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+	show_term(just);
+	printf("\n");
+
 	return 0;
 }
