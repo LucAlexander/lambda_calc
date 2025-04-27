@@ -5,8 +5,6 @@
 #include "kickstart.h"
 #include "hashmap.h"
 
-#define DEBUG
-
 #define POOL_SIZE 0x10000000
 #define NAME_MAX 16
 #define TOKEN_MAX NAME_MAX

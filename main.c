@@ -2629,6 +2629,9 @@ create_constructor(interpreter* const inter, simple_type* const type, uint64_t a
 			focus->data.appl.right = pool_request(inter->mem, sizeof(expr));
 			focus = focus->data.appl.right;
 			focus->tag = NAME_EXPR;
+			focus->typed = 1;
+			focus->simple = pool_request(inter->mem, sizeof(simple_type));
+			deep_copy_simple_type(inter->mem, &type->data.product.members[i], focus->simple);
 			focus->data.name = rebase->data.bind.name;
 			rebase = rebase->data.bind.expression;
 		}
