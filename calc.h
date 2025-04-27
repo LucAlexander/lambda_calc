@@ -328,6 +328,7 @@ simple_type* parse_type_def(char* cstr, interpreter* const inter);
 
 void parameterize_simple_type_worker(interpreter* const inter, simple_type* const type, uint8_t_map* const is_param);
 void parameterize_simple_type(interpreter* const inter, simple_type* const type);
+void lower_type(interpreter* const inter, simple_type* const type, simple_type* const newtype);
 simple_type* parse_type_use_recursive(type_parser* const parse, uint8_t nested);
 
 #endif

@@ -2050,6 +2050,9 @@ show_simple_type(simple_type* const type){
 		for (uint64_t i = 0;i<type->data.product.member_count;++i){
 			printf(" ");
 			show_simple_type(&type->data.product.members[i]);
+			if (i+1 != type->data.product.member_count){
+				printf(" | ");
+			}
 		}
 		break;
 	case PRODUCT_TYPE:
@@ -2661,7 +2664,7 @@ parse_type_use(char* cstr, interpreter* const inter){
 	printf("\n");
 #endif
 	pool_dealloc(&tokens);
-	return NULL;
+	return result;
 }
 
 void
@@ -2732,6 +2735,46 @@ show_type_tokens(type_parser* const parse){
 		default:
 			printf("[ UNKNOWN TYPE TOKEN VARIANT : ??? ] ");
 		}
+	}
+}
+
+//TODO correctness needs to be ensure before this function
+void
+lower_type(interpreter* const inter, simple_type* const target, simple_type* const new){
+	*new = *target;
+	switch (target->tag){
+	case SUM_TYPE:
+		new->data.sum.alts = pool_request(inter->mem, sizeof(simple_type)*target->data.sum.alt_count);
+		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
+			lower_type(inter, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+		}
+		break;
+	case PRODUCT_TYPE:
+		simple_type* ref = simple_type_map_access(&inter->types, target->data.product.name);
+		if (ref != NULL){
+			simple_type_map relation = simple_type_map_init(inter->mem);
+			for (uint64_t i = 0;i<ref->parameter_count;++i){
+				simple_type_map_insert(&relation, ref->parameters[i], target->data.product.members[i]);
+			}
+			deep_copy_simple_type_replace_multiple(inter->mem, ref, new, &relation);
+			simple_type nest_lowered;
+			lower_type(inter, new, &nest_lowered);
+			*new = nest_lowered;
+			break;
+		}
+		new->data.product.members = pool_request(inter->mem, sizeof(simple_type)*target->data.product.member_count);
+		for (uint64_t i = 0;i<target->data.product.member_count;++i){
+			lower_type(inter, &target->data.product.members[i], &new->data.product.members[i]);
+		}
+		break;
+	case FUNCTION_TYPE:
+		new->data.function.left = pool_request(inter->mem, sizeof(simple_type));
+		new->data.function.right = pool_request(inter->mem, sizeof(simple_type));
+		lower_type(inter, target->data.function.left, new->data.function.left);
+		lower_type(inter, target->data.function.right, new->data.function.right);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -2817,16 +2860,12 @@ main(int argc, char** argv){
 	parse_type_def("Parser F = Parser String -> F", &inter);
 
 	simple_type_map_insert(&inter.types, maybe->data.sum.name, *maybe);
-	parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
-	//TODO keep track of what is a parameter
-	//
-	// add all type defs to map
-	// when creating a use, pass over and check any given product name with the map
-	//  if there is a hit, keep
-	//  else replace the node with a parameter // what if the parameter is parametric? (J -> T J)
-	//
+	simple_type* fmap = parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
+	simple_type low_type;
+	lower_type(&inter, fmap, &low_type);
+	show_simple_type(&low_type);
+	printf("\n");
+	// what if the parameter is parametric? (J -> T J)
 	// when building a low type
-	//  if there is a hit, keep, and replace with hit copy
-	//  else replace node with a parameter
 	return 0;
 }
