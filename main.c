@@ -2067,7 +2067,9 @@ show_simple_type(simple_type* const type){
 		printf(")");
 		break;
 	case PARAMETER_TYPE:
+		printf("[");
 		string_print(&type->data.parameter);
+		printf("]");
 		break;
 	}
 }
@@ -2653,12 +2655,54 @@ parse_type_use(char* cstr, interpreter* const inter){
 	printf("\n");
 #endif
 	simple_type* result = parse_type_use_recursive(&parse, 0);
+	parameterize_simple_type(inter, result);
 #ifdef DEBUG
 	show_simple_type(result);
 	printf("\n");
 #endif
 	pool_dealloc(&tokens);
 	return NULL;
+}
+
+void
+parameterize_simple_type_worker(interpreter* const inter, simple_type* const type, uint8_t_map* const is_param){
+	switch (type->tag){
+	case SUM_TYPE:
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
+			parameterize_simple_type_worker(inter, &type->data.sum.alts[i], is_param);
+		}
+		break;
+	case PRODUCT_TYPE:
+		if (uint8_t_map_access(is_param, type->data.product.name) != NULL){
+			string param = type->data.product.name;
+			type->tag = PARAMETER_TYPE;
+			type->data.parameter = param;
+			break;
+		}
+		if (simple_type_map_access(&inter->types, type->data.product.name) == NULL){
+			uint8_t_map_insert(is_param, type->data.product.name, 1);
+			string param = type->data.product.name;
+			type->tag = PARAMETER_TYPE;
+			type->data.parameter = param;
+			break;
+		}
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
+			parameterize_simple_type_worker(inter, &type->data.product.members[i], is_param);
+		}
+		break;
+	case FUNCTION_TYPE:
+		parameterize_simple_type_worker(inter, type->data.function.left, is_param);
+		parameterize_simple_type_worker(inter, type->data.function.right, is_param);
+		break;
+	case PARAMETER_TYPE:
+		break;
+	}
+}
+
+void
+parameterize_simple_type(interpreter* const inter, simple_type* const type){
+	uint8_t_map is_param = uint8_t_map_init(inter->mem);
+	parameterize_simple_type_worker(inter, type, &is_param);
 }
 
 void
@@ -2696,6 +2740,7 @@ main(int argc, char** argv){
 	srand(time(NULL));
 	pool mem = pool_alloc(POOL_SIZE, POOL_DYNAMIC);
 	interpreter inter = interpreter_init(&mem);
+	inter.types = simple_type_map_init(&mem);
 	if (0){// example functionality
 		add_to_universe(&inter, "flip", "\\x.\\y.y x");
 		add_to_universe(&inter, "const", "\\x.\\y.x");
@@ -2765,16 +2810,23 @@ main(int argc, char** argv){
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
 	}
-	parse_type_def("Maybe T = Just T | Nothing", &inter);
+	simple_type* maybe = parse_type_def("Maybe T = Just T | Nothing", &inter);
 	parse_type_def("Either L R = Left L | Right R", &inter);
 	parse_type_def("List T = Nil | Const T", &inter);
 	parse_type_def("Parser F = Parser (String -> F)", &inter);
 	parse_type_def("Parser F = Parser String -> F", &inter);
 
+	simple_type_map_insert(&inter.types, maybe->data.sum.name, *maybe);
 	parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
-	parse_type_use("(A -> B -> C -> D)", &inter);
-	parse_type_use("A -> B -> C -> D", &inter);
-	parse_type_use("A -> (B -> C) -> D", &inter);
-
+	//TODO keep track of what is a parameter
+	//
+	// add all type defs to map
+	// when creating a use, pass over and check any given product name with the map
+	//  if there is a hit, keep
+	//  else replace the node with a parameter // what if the parameter is parametric? (J -> T J)
+	//
+	// when building a low type
+	//  if there is a hit, keep, and replace with hit copy
+	//  else replace node with a parameter
 	return 0;
 }
