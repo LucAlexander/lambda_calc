@@ -291,7 +291,6 @@ typedef struct parameter_diff {
 
 uint8_t simple_type_compare_parametric_differences(pool* const mem, simple_type* const left, simple_type* const right, parameter_diff* const node, parameter_string_map* params);
 void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const target, simple_type* const new, simple_type_map* const replacement_map);
-simple_type** create_constructor_types(pool* const mem, simple_type* type, uint64_t* len);
 
 typedef enum TYPE_TOKEN {
 	TYPE_IDENTIFIER_TOKEN,
@@ -331,5 +330,8 @@ simple_type* parse_type_use_recursive(type_parser* const parse, uint8_t nested);
 uint8_t simple_type_constructors_unique_worker(interpreter* const inter, simple_type* type);
 uint8_t simple_type_constructors_unique(interpreter* const inter, simple_type* type);
 void create_constructor(interpreter* const inter, simple_type* const type, uint64_t alt_count, uint64_t alt_selector);
+uint8_t distribute_simple_type(interpreter* const inter, simple_type* const type, expr* const term);
+void parameterize_simple_type_def(interpreter* const inter, simple_type* const type);
+void parameterize_simple_type_def_worker(interpreter* const inter, simple_type* const type, uint8_t_map* const is_param, uint8_t top);
 
 #endif

@@ -2276,70 +2276,30 @@ void deep_copy_simple_type_replace_multiple(pool* const mem, simple_type* const 
 	case SUM_TYPE:
 		new->data.sum.alts = pool_request(mem, sizeof(simple_type)*target->data.sum.alt_count);
 		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
-			deep_copy_simple_type(mem, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+			deep_copy_simple_type_replace_multiple(mem, &target->data.sum.alts[i], &new->data.sum.alts[i], replacement_map);
 		}
 		break;
 	case PRODUCT_TYPE:
 		new->data.product.members = pool_request(mem, sizeof(simple_type)*target->data.product.member_count);
 		for (uint64_t i = 0;i<target->data.product.member_count;++i){
-			deep_copy_simple_type(mem, &target->data.product.members[i], &new->data.product.members[i]);
+			deep_copy_simple_type_replace_multiple(mem, &target->data.product.members[i], &new->data.product.members[i], replacement_map);
 		}
 		break;
 	case FUNCTION_TYPE:
 		new->data.function.left = pool_request(mem, sizeof(simple_type));
 		new->data.function.right = pool_request(mem, sizeof(simple_type));
-		deep_copy_simple_type(mem, target->data.function.left, new->data.function.left);
-		deep_copy_simple_type(mem, target->data.function.right, new->data.function.right);
+		deep_copy_simple_type_replace_multiple(mem, target->data.function.left, new->data.function.left, replacement_map);
+		deep_copy_simple_type_replace_multiple(mem, target->data.function.right, new->data.function.right, replacement_map);
 		break;
 	case PARAMETER_TYPE:
 		simple_type* replacement = simple_type_map_access(replacement_map, target->data.parameter);
 		if (replacement != NULL){
-			deep_copy_simple_type(mem, replacement, new);
+			deep_copy_simple_type_replace_multiple(mem, replacement, new, replacement_map);
 		}
 		break;
 	default:
 		break;
 	}
-}
-
-simple_type**
-create_constructor_types(pool* const mem, simple_type* type, uint64_t* len){
-	*len = 0;
-	simple_type* base;
-	simple_type* focus;
-	simple_type** buffer;
-	switch (type->tag){
-	case SUM_TYPE:
-		buffer = pool_request(mem, sizeof(simple_type)*type->data.sum.alt_count);
-		for (uint64_t k = 0;k<type->data.sum.alt_count;++k){
-			uint64_t size;
-			simple_type** intermediate = create_constructor_types(mem, &type->data.sum.alts[k], &size);
-			for (uint64_t i = 0;i<size;++i){
-				buffer[*len] = intermediate[i];
-				*len += 1;
-			}
-		}
-		return buffer;
-	case PRODUCT_TYPE:
-		base = pool_request(mem, sizeof(simple_type));
-		focus = base;
-		for (uint64_t i = 0;i<type->data.product.member_count;++i){
-			focus->tag = FUNCTION_TYPE;
-			focus->data.function.left = pool_request(mem, sizeof(simple_type));
-			focus->data.function.right = pool_request(mem, sizeof(simple_type));
-			simple_type* left = focus->data.function.left;
-			deep_copy_simple_type(mem, &type->data.product.members[i], left);
-			focus = focus->data.function.right;
-		}
-		deep_copy_simple_type(mem, focus, type);
-		buffer = pool_request(mem, sizeof(simple_type));
-		buffer[*len] = base;
-		*len += 1;
-		return buffer;
-	default:
-		return NULL;
-	}
-	return NULL;
 }
 
 uint8_t
@@ -2591,17 +2551,24 @@ void
 create_constructor(interpreter* const inter, simple_type* const type, uint64_t alt_count, uint64_t alt_selector){
 	switch (type->tag){
 	case PRODUCT_TYPE:
+		simple_type* type_focus = pool_request(inter->mem, sizeof(simple_type));
+		simple_type* full_type = type_focus;
 		expr* focus = pool_request(inter->mem, sizeof(expr));
 		expr* base = focus;
 		for (uint64_t i = 0;i<type->data.product.member_count;++i){
 			focus->tag = BIND_EXPR;
 			focus->data.bind.name = next_string(inter);
 			focus->data.bind.expression = pool_request(inter->mem, sizeof(expr));
-			focus->typed = 1;
-			focus->simple = pool_request(inter->mem, sizeof(simple_type));
-			deep_copy_simple_type(inter->mem, &type->data.product.members[i], focus->simple);
+			focus->typed = 0;
 			focus = focus->data.bind.expression;
+
+			type_focus->tag = FUNCTION_TYPE;
+			type_focus->data.function.left = pool_request(inter->mem, sizeof(simple_type));
+			type_focus->data.function.right = pool_request(inter->mem, sizeof(simple_type));
+			deep_copy_simple_type(inter->mem, &type->data.product.members[i], type_focus->data.function.left);
+			type_focus = type_focus->data.function.right;
 		}
+		deep_copy_simple_type(inter->mem, type, type_focus);
 		string alt_name;
 		for (uint64_t i = 0;i<alt_count;++i){
 			focus->tag = BIND_EXPR;
@@ -2626,20 +2593,48 @@ create_constructor(interpreter* const inter, simple_type* const type, uint64_t a
 			focus->data.appl.right = pool_request(inter->mem, sizeof(expr));
 			focus = focus->data.appl.right;
 			focus->tag = NAME_EXPR;
-			focus->typed = 1;
-			focus->simple = pool_request(inter->mem, sizeof(simple_type));
-			deep_copy_simple_type(inter->mem, &type->data.product.members[i], focus->simple);
+			focus->typed = 0;
 			focus->data.name = rebase->data.bind.name;
 			rebase = rebase->data.bind.expression;
 		}
 		char* name = pool_request(inter->mem, type->data.product.name.len+1);
 		strncpy(name,type->data.product.name.str,type->data.product.name.len);
 		name[type->data.product.name.len] = '\0';
+		distribute_simple_type(inter, full_type, base);
 		expr_map_insert(&inter->universe, name, base);
 		break;
 	default:
 		break;
 	}
+}
+
+uint8_t
+distribute_simple_type(interpreter* const inter, simple_type* const type, expr* const term){
+	switch (term->tag){
+	case BIND_EXPR:
+		term->typed = 1;
+		term->simple = pool_request(inter->mem, sizeof(simple_type));
+		deep_copy_simple_type(inter->mem, type, term->simple);
+		if (type->tag == FUNCTION_TYPE){
+			return distribute_simple_type(inter, type->data.function.right, term->data.bind.expression);
+		}
+		return 1;
+	case APPL_EXPR:
+		term->typed = 1;
+		term->simple = pool_request(inter->mem, sizeof(simple_type));
+		deep_copy_simple_type(inter->mem, type, term->simple);
+		if (type->tag == FUNCTION_TYPE){
+			return distribute_simple_type(inter, type->data.function.right, term->data.appl.right)
+				 | distribute_simple_type(inter, type->data.function.left, term->data.appl.left);
+		}
+		return 1;
+	case NAME_EXPR:
+		term->typed = 1;
+		term->simple = pool_request(inter->mem, sizeof(simple_type));
+		deep_copy_simple_type(inter->mem, type, term->simple);
+		return 1;
+	}
+	return 0;
 }
 
 simple_type*
@@ -2657,6 +2652,7 @@ parse_type_def(char* cstr, interpreter* const inter){
 	printf("\n");
 #endif
 	simple_type* result = parse_type_def_recursive(&parse);
+	parameterize_simple_type_def(inter, result);
 	if (simple_type_constructors_unique(inter, result) == 1){
 		simple_type_map_insert(&inter->types, result->data.sum.name, *result);
 	}
@@ -2811,6 +2807,57 @@ parameterize_simple_type(interpreter* const inter, simple_type* const type){
 }
 
 void
+parameterize_simple_type_def_worker(interpreter* const inter, simple_type* const type, uint8_t_map* const is_param, uint8_t top){
+	switch (type->tag){
+	case SUM_TYPE:
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
+			parameterize_simple_type_def_worker(inter, &type->data.sum.alts[i], is_param, 0);
+		}
+		break;
+	case PRODUCT_TYPE:
+		if (top == 0){
+			if (uint8_t_map_access(is_param, type->data.product.name) != NULL){
+				string param = type->data.product.name;
+				type->tag = PARAMETER_TYPE;
+				type->data.parameter = param;
+				break;
+			}
+			if (simple_type_map_access(&inter->types, type->data.product.name) == NULL){
+				uint8_t_map_insert(is_param, type->data.product.name, 1);
+				string param = type->data.product.name;
+				type->tag = PARAMETER_TYPE;
+				type->data.parameter = param;
+				break;
+			}
+		}
+		for (uint64_t i = 0;i<type->data.product.member_count;++i){
+			parameterize_simple_type_def_worker(inter, &type->data.product.members[i], is_param, 0);
+		}
+		break;
+	case FUNCTION_TYPE:
+		parameterize_simple_type_def_worker(inter, type->data.function.left, is_param, 0);
+		parameterize_simple_type_def_worker(inter, type->data.function.right, is_param, 0);
+		break;
+	case PARAMETER_TYPE:
+		break;
+	}
+}
+
+void
+parameterize_simple_type_def(interpreter* const inter, simple_type* const type){
+	uint8_t_map is_param = uint8_t_map_init(inter->mem);
+	switch (type->tag){
+	case SUM_TYPE:
+		for (uint64_t i = 0;i<type->data.sum.alt_count;++i){
+			parameterize_simple_type_def_worker(inter, &type->data.sum.alts[i], &is_param, 1);
+		}
+		break;
+	default:
+		fprintf(stderr, "Unexpected top level in parameterize def type\n");
+	}
+}
+
+void
 show_type_tokens(type_parser* const parse){
 	for (uint64_t i = 0;i<parse->token_count;++i){
 		switch (parse->tokens[i].tag){
@@ -2846,9 +2893,9 @@ lower_type(interpreter* const inter, simple_type* const target, simple_type* con
 	switch (target->tag){
 	case SUM_TYPE:
 		new->data.sum.alts = pool_request(inter->mem, sizeof(simple_type)*target->data.sum.alt_count);
-		for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
-			lower_type(inter, &target->data.sum.alts[i], &new->data.sum.alts[i]);
-		}
+		//for (uint64_t i = 0;i<target->data.sum.alt_count;++i){
+		//	lower_type(inter, &target->data.sum.alts[i], &new->data.sum.alts[i]);
+		//}
 		break;
 	case PRODUCT_TYPE:
 		simple_type* ref = simple_type_map_access(&inter->types, target->data.product.name);
@@ -2858,9 +2905,9 @@ lower_type(interpreter* const inter, simple_type* const target, simple_type* con
 				simple_type_map_insert(&relation, ref->parameters[i], target->data.product.members[i]);
 			}
 			deep_copy_simple_type_replace_multiple(inter->mem, ref, new, &relation);
-			simple_type nest_lowered;
-			lower_type(inter, new, &nest_lowered);
-			*new = nest_lowered;
+			//simple_type nest_lowered;
+			//lower_type(inter, new, &nest_lowered);
+			//*new = nest_lowered;
 			break;
 		}
 		new->data.product.members = pool_request(inter->mem, sizeof(simple_type)*target->data.product.member_count);
@@ -2954,25 +3001,49 @@ main(int argc, char** argv){
 		uint8_t res = term_matches_type(&mem, &env, sresult, &Pair, params, 1);
 		printf("%u\n", res);
 	}
-	simple_type* maybe = parse_type_def("Maybe T = Just T | Nothing", &inter);
-	parse_type_def("Either L R = Left L | Right R", &inter);
-	parse_type_def("List T = Nil | Const T", &inter);
-	parse_type_def("Parser F = Parser (String -> F)", &inter);
+	if (0){
+		parse_type_def("Either L R = Left L | Right R", &inter);
+		parse_type_def("List T = Nil | Const T", &inter);
+		parse_type_def("Parser F = Parser (String -> F)", &inter);
 
-	simple_type* fmap = parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
-	simple_type low_type;
-	lower_type(&inter, fmap, &low_type);
-	show_simple_type(&low_type);
-	printf("\n");
+		simple_type* fmap = parse_type_use("(A -> B) -> Maybe A -> Maybe B", &inter);
+		simple_type low_type;
+		lower_type(&inter, fmap, &low_type);
+		show_simple_type(&low_type);
+		printf("\n");
+	}
 
-	uint64_t slen = strlen("Just 5");
-	char* sterm = pool_request(&mem, slen+1);
-	strncpy(sterm, "Just 2", slen);
-	expr* just = parse_term(sterm, &inter);
-	uint8_t reductions = 128;
-	while (reduce_step(&inter, just, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
-	show_term(just);
-	printf("\n");
+	{
+		parse_type_def("Nat = Nat", &inter);
+		uint64_t natlen = strlen("2");
+		char* natterm = pool_request(&mem, natlen+1);
+		strncpy(natterm, "2", natlen);
+		expr* nat = parse_term(natterm, &inter);
+		simple_type* hinat = parse_type_use("Nat", &inter);
+		simple_type lownat;
+		lower_type(&inter, hinat, &lownat);
+		show_simple_type(&lownat);
+		printf("\n");
+		distribute_simple_type(&inter, &lownat, nat);
+
+		parse_type_def("Maybe T = Just T | Nothing", &inter);
+		uint64_t slen = strlen("Just");
+		char* sterm = pool_request(&mem, slen+1);
+		strncpy(sterm, "Just", slen);
+		expr* just = expr_map_access(&inter.universe, sterm);
+
+		expr* applied = apply_term(&inter, just, nat);
+		show_term(applied);
+		printf("\n");
+		show_simple_type(applied->simple);
+		printf("\n");
+
+		//uint8_t reductions = 128;
+		//while (reduce_step(&inter, just, MAX_REDUCTION_DEPTH) != 0 && (reductions-- > 0)){}
+		//show_term(just);
+		//show_simple_type(just->simple);
+		//printf("\n");
+	}
 
 	return 0;
 }
